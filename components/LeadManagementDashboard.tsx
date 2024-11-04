@@ -1,30 +1,39 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { PlusCircle, Edit2, MessageSquare, Clock } from 'lucide-react'
-import { useToast } from "@/components/ui/use-toast"
-import { Badge } from '@/components/ui/badge'
-import { Textarea } from '@/components/ui/textarea'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { sendWhatsApp } from '@/lib/whatsapp-service'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
+import { PlusCircle, Edit2, MessageSquare, Clock, Calendar as CalendarIcon } from 'lucide-react'
+import { useToast } from "./ui/use-toast"
+import { Badge } from './ui/badge'
+import { Textarea } from './ui/textarea'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
+import { cn } from '@/lib/utils'
+import { format } from 'date-fns'
+import { sendWhatsApp } from '../lib/whatsapp-service'
 
-const USER_MAPPING: Record<string, string> = {
-  '+971543323218': 'Dr. (CA) Amit Garg',
-  '+971543323219': 'Mr. Prabhakaran',
-  '+971543323220': 'Mr. Sumesh Paul',
+const USER_MAPPING: Record<string, { name: string; phone: string }> = {
+  '+971506294302': { name: 'Dr. (CA) Amit Garg', phone: '+971506294302' },
+  '+971543323219': { name: 'Mr. Prabhakaran', phone: '+971543323219' },
+  '+971543323218': { name: 'Mr. Sumesh Paul', phone: '+971543323218' },
+}
+
+const getUserPhoneNumber = (name: string): string => {
+  const user = Object.values(USER_MAPPING).find(u => u.name === name)
+  return user?.phone || ''
 }
 
 const canUpdateStatus = (lead: Lead, userPhone: string, newStatus: LeadStatus) => {
   const assignedUserPhone = Object.entries(USER_MAPPING).find(
-    ([phone, name]) => name === lead.assignedTo
+    ([_, user]) => user.name === lead.assignedTo
   )?.[0]
-  
+
   if (newStatus === 'Closed' || newStatus === 'Terminated') {
     return assignedUserPhone === userPhone
   }
@@ -32,7 +41,14 @@ const canUpdateStatus = (lead: Lead, userPhone: string, newStatus: LeadStatus) =
 }
 
 const formatUserDisplay = (phoneNumber: string) => {
-  return USER_MAPPING[phoneNumber] || phoneNumber
+  return USER_MAPPING[phoneNumber]?.name || phoneNumber
+}
+
+const sendWhatsAppToAllTeamMembers = async (message: string) => {
+  const teamPhones = Object.values(USER_MAPPING).map(user => user.phone)
+  for (const phone of teamPhones) {
+    await sendWhatsApp(phone, message)
+  }
 }
 
 export type Division = 'Real Estate Consulting' | 'Management Consulting' | 'Trading' | 'Real Estate Brokerage' | 'M&A and Private Equity'
@@ -52,6 +68,13 @@ export interface Activity {
   timestamp: string
 }
 
+export interface FollowUp {
+  id: string
+  date: Date
+  time: string
+  description: string
+}
+
 export interface Lead {
   id: string
   title: string
@@ -61,13 +84,16 @@ export interface Lead {
   lastUpdated: string
   comments: Comment[]
   activities: Activity[]
+  followUps: FollowUp[]
 }
 
 interface LeadManagementDashboardProps {
   userPhoneNumber: string
+  userName: string
+  onLogout: () => void
 }
 
-export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagementDashboardProps) {
+export default function LeadManagementDashboard({ userPhoneNumber, userName, onLogout }: LeadManagementDashboardProps) {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [leads, setLeads] = useState<Lead[]>([
     {
@@ -75,20 +101,22 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
       title: 'Warehouse Solutions Project',
       division: 'Real Estate Consulting',
       status: 'In Progress',
-      assignedTo: 'Dr. Amit',
+      assignedTo: 'Dr. (CA) Amit Garg',
       lastUpdated: '2024-01-04',
       comments: [],
       activities: [],
+      followUps: [],
     },
     {
       id: '2',
       title: 'Corporate Tax Advisory',
       division: 'Management Consulting',
       status: 'New',
-      assignedTo: 'Mr. Prabhu',
+      assignedTo: 'Mr. Prabhakaran',
       lastUpdated: '2024-01-05',
       comments: [],
       activities: [],
+      followUps: [],
     },
     {
       id: '3',
@@ -99,26 +127,29 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
       lastUpdated: '2024-01-06',
       comments: [],
       activities: [],
+      followUps: [],
     },
     {
       id: '4',
       title: 'Commercial Property Listing',
       division: 'Real Estate Brokerage',
       status: 'New',
-      assignedTo: 'Dr. Amit',
+      assignedTo: 'Dr. (CA) Amit Garg',
       lastUpdated: '2024-01-07',
       comments: [],
       activities: [],
+      followUps: [],
     },
     {
       id: '5',
       title: 'Tech Startup Acquisition',
       division: 'M&A and Private Equity',
       status: 'In Progress',
-      assignedTo: 'Mr. Prabhu',
+      assignedTo: 'Mr. Prabhakaran',
       lastUpdated: '2024-01-08',
       comments: [],
       activities: [],
+      followUps: [],
     },
   ])
 
@@ -132,6 +163,11 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
   const [isEditing, setIsEditing] = useState(false)
   const [editedLead, setEditedLead] = useState<Lead | null>(null)
   const [newComment, setNewComment] = useState('')
+  const [newFollowUp, setNewFollowUp] = useState<Partial<FollowUp>>({
+    date: new Date(),
+    time: '09:00',
+    description: '',
+  })
 
   const { toast } = useToast()
 
@@ -142,7 +178,8 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
+      timeZone: 'Asia/Dubai'  // Set to UAE timezone
     }).format(new Date())
   }
 
@@ -171,10 +208,11 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
       comments: [],
       activities: [{
         id: Date.now().toString(),
-        description: `Lead created by ${userPhoneNumber}`,
+        description: `Lead created by ${formatUserDisplay(userPhoneNumber)}`,
         author: userPhoneNumber,
         timestamp
       }],
+      followUps: [],
     }
 
     setLeads([...leads, lead])
@@ -185,16 +223,13 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
       assignedTo: '',
     })
 
-    // Send WhatsApp notification
-    const message = `New lead assigned: "${lead.title}" has been assigned to you. Please check the dashboard for details.`
-    const result = await sendWhatsApp(lead.assignedTo, message)
+    const message = `New lead assigned: "${lead.title}" has been assigned to ${lead.assignedTo}. Please check the dashboard for details.`
+    await sendWhatsAppToAllTeamMembers(message)
 
     toast({
-      title: result.success ? "Lead Added Successfully" : "Lead Addition Warning",
-      description: result.success 
-        ? `${lead.title} has been assigned to ${lead.assignedTo}`
-        : `Lead added but ${result.error || 'failed to send WhatsApp notification'}`,
-      variant: result.success ? "default" : "destructive",
+      title: "Lead Added Successfully",
+      description: `${lead.title} has been assigned to ${lead.assignedTo}. WhatsApp notifications sent to all team members.`,
+      variant: "default",
     })
   }
 
@@ -202,7 +237,7 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
     const timestamp = formatTimestamp()
     const activity: Activity = {
       id: Date.now().toString(),
-      description: `Lead updated by ${userPhoneNumber}`,
+      description: `Lead updated by ${formatUserDisplay(userPhoneNumber)}`,
       author: userPhoneNumber,
       timestamp
     }
@@ -219,34 +254,27 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
     setLeads(updatedLeads)
     setSelectedLead(finalUpdatedLead)
 
-    if (updatedLead.assignedTo !== selectedLead?.assignedTo) {
-      const message = `Lead "${updatedLead.title}" has been reassigned to you.`
-      const result = await sendWhatsApp(updatedLead.assignedTo, message)
+    const message = `Lead "${updatedLead.title}" has been updated by ${formatUserDisplay(userPhoneNumber)}.`
+    await sendWhatsAppToAllTeamMembers(message)
 
-      toast({
-        title: result.success ? "Lead Reassigned Successfully" : "Lead Reassignment Warning",
-        description: result.success 
-          ? `${updatedLead.title} has been reassigned to ${updatedLead.assignedTo}`
-          : `Lead reassigned but ${result.error || 'failed to send WhatsApp notification'}`,
-        variant: result.success ? "default" : "destructive",
-      })
-    } else {
-      toast({
-        title: "Lead Updated Successfully",
-        description: `${updatedLead.title} has been updated`,
-      })
-    }
+    toast({
+      title: "Lead Updated Successfully",
+      description: `${updatedLead.title} has been updated. WhatsApp notifications sent to all team members.`,
+    })
   }
 
   const handleEditClick = () => {
-    setIsEditing(true)
-    setEditedLead(selectedLead)
+    if (selectedLead) {
+      setIsEditing(true)
+      setEditedLead({...selectedLead})
+    }
   }
 
   const handleSaveEdit = async () => {
     if (editedLead) {
       await handleUpdateLead(editedLead)
       setIsEditing(false)
+      setEditedLead(null)
     }
   }
 
@@ -261,9 +289,60 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
       timestamp
     }
 
+    const activity: Activity = {
+      id: Date.now().toString(),
+      description: `Comment added by ${formatUserDisplay(userPhoneNumber)}: "${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}"`,
+      author: userPhoneNumber,
+      timestamp
+    }
+
     const updatedLead = {
       ...selectedLead,
       comments: [...selectedLead.comments, comment],
+      activities: [...selectedLead.activities, activity],
+      lastUpdated: new Date().toISOString().split('T')[0]
+    }
+
+    const updatedLeads = leads.map(lead => 
+      lead.id === updatedLead.id ? updatedLead : lead
+    )
+    setLeads(updatedLeads)
+    
+    setSelectedLead(updatedLead)
+    setNewComment('')
+
+    const message = `New comment on lead "${selectedLead.title}" by ${formatUserDisplay(userPhoneNumber)}: ${newComment}`
+    await sendWhatsAppToAllTeamMembers(message)
+
+    toast({
+      title: "Comment Added Successfully",
+      description: `Comment added to ${selectedLead.title}. WhatsApp notifications sent to all team members.`,
+      variant: "default",
+    })
+  }
+
+  const handleAddFollowUp = async () => {
+    if (!selectedLead || !newFollowUp.date || !newFollowUp.time || !newFollowUp.description) return
+
+    const timestamp = formatTimestamp()
+    const followUp: FollowUp = {
+      id: Date.now().toString(),
+      date: newFollowUp.date,
+      time: newFollowUp.time,
+      description: newFollowUp.description,
+    }
+
+    const activity: Activity = {
+      id: Date.now().toString(),
+      description: `Follow-up scheduled by ${formatUserDisplay(userPhoneNumber)} for ${format(followUp.date, 'PPP')} at ${followUp.time}`,
+      author: userPhoneNumber,
+      timestamp
+    }
+
+    const updatedLead = {
+      ...selectedLead,
+      followUps: [...selectedLead.followUps, followUp],
+      activities: [...selectedLead.activities, activity],
       lastUpdated: new Date().toISOString().split('T')[0]
     }
 
@@ -272,19 +351,17 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
     )
     setLeads(updatedLeads)
     setSelectedLead(updatedLead)
-    setNewComment('')
+    setNewFollowUp({ date: new Date(), time: '09:00', description: '' })
 
-    // Send WhatsApp notification to assigned user
-    const message = `New comment on lead "${selectedLead.title}": ${newComment}`
-    const result = await sendWhatsApp(selectedLead.assignedTo, message)
+    const message = `New follow-up for lead "${selectedLead.title}": ${followUp.description} scheduled for ${format(followUp.date, 'PPP')} at ${followUp.time}`
+    await sendWhatsAppToAllTeamMembers(message)
 
     toast({
-      title: result.success ? "Comment Added Successfully" : "Comment Addition Warning",
-      description: result.success 
-        ? `Comment added to ${selectedLead.title}`
-        : `Comment added but ${result.error || 'failed to send WhatsApp notification'}`,
-      variant: result.success ? "default" : "destructive",
+      title: "Follow-up Added",
+      description: `Follow-up scheduled for ${format(followUp.date, 'PPP')} at ${followUp.time}. WhatsApp notifications sent to all team members.`,
     })
+
+    console.log(`Reminder set for ${format(followUp.date, 'PPP')} at ${followUp.time}: ${followUp.description}`)
   }
 
   return (
@@ -292,8 +369,8 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Lead Management Dashboard</h1>
         <div className="flex items-center gap-4">
-          <span>Logged in as: {formatUserDisplay(userPhoneNumber)}</span>
-          <Button variant="outline" onClick={() => {/* Implement logout logic */}}>Logout</Button>
+          <span>Logged in as: {userName} ({userPhoneNumber})</span>
+          <Button variant="outline" onClick={onLogout}>Logout</Button>
         </div>
       </div>
       
@@ -324,10 +401,10 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
                   <SelectValue placeholder="Select Division" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Real Estate Consulting">Real Estate Consulting</SelectItem>
-                  <SelectItem value="Management Consulting">Management Consulting</SelectItem>
+                  <SelectItem value="Real Estate Consulting">Real Estate  Consulting</SelectItem>
+                  <SelectItem value="Management Consulting">Management  Consulting</SelectItem>
                   <SelectItem value="Trading">Trading</SelectItem>
-                  <SelectItem value="Real Estate Brokerage">Real Estate Brokerage</SelectItem>
+                  <SelectItem value="Real Estate Brokerage">Real Estate  Brokerage</SelectItem>
                   <SelectItem value="M&A and Private Equity">M&A and Private Equity</SelectItem>
                 </SelectContent>
               </Select>
@@ -341,8 +418,8 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
                   <SelectValue placeholder="Assign To" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Dr. Amit">Dr. Amit</SelectItem>
-                  <SelectItem value="Mr. Prabhu">Mr. Prabhu</SelectItem>
+                  <SelectItem value="Dr. (CA) Amit Garg">Dr. (CA) Amit Garg</SelectItem>
+                  <SelectItem value="Mr. Prabhakaran">Mr. Prabhakaran</SelectItem>
                   <SelectItem value="Mr. Sumesh Paul">Mr. Sumesh Paul</SelectItem>
                 </SelectContent>
               </Select>
@@ -389,8 +466,10 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
               </CardHeader>
               <CardContent>
                 <Tabs defaultValue="details" className="w-full">
-                  <TabsList>
-                    <TabsTrigger value="details">Details</TabsTrigger>
+                  <TabsList className="grid w-full grid-cols-4">
+                    <TabsTrigger value="details" className="flex items-center gap-2">
+                      Details
+                    </TabsTrigger>
                     <TabsTrigger value="comments" className="flex items-center gap-2">
                       <MessageSquare className="h-4 w-4" />
                       Comments
@@ -398,6 +477,10 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
                     <TabsTrigger value="activity" className="flex items-center gap-2">
                       <Clock className="h-4 w-4" />
                       Activity
+                    </TabsTrigger>
+                    <TabsTrigger value="followups" className="flex items-center gap-2">
+                      <CalendarIcon className="h-4 w-4" />
+                      Follow-ups
                     </TabsTrigger>
                   </TabsList>
 
@@ -469,8 +552,8 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
                               <SelectValue placeholder="Assign To" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="Dr. Amit">Dr. Amit</SelectItem>
-                              <SelectItem value="Mr. Prabhu">Mr. Prabhu</SelectItem>
+                              <SelectItem value="Dr. (CA) Amit Garg">Dr. (CA) Amit Garg</SelectItem>
+                              <SelectItem value="Mr. Prabhakaran">Mr. Prabhakaran</SelectItem>
                               <SelectItem value="Mr. Sumesh Paul">Mr. Sumesh Paul</SelectItem>
                             </SelectContent>
                           </Select>
@@ -518,6 +601,62 @@ export default function LeadManagementDashboard({ userPhoneNumber }: LeadManagem
                           </p>
                         </div>
                       ))}
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="followups" className="space-y-4">
+                    <div className="space-y-4">
+                      {selectedLead.followUps.map((followUp) => (
+                        <div key={followUp.id} className="bg-muted p-4 rounded-lg">
+                          <p className="mb-2">{followUp.description}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Scheduled for: {format(followUp.date, 'PPP')} at {followUp.time}
+                          </p>
+                        </div>
+                      ))}
+                      <div className="space-y-2">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-[280px] justify-start text-left font-normal",
+                                !newFollowUp.date && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {newFollowUp.date ? format(newFollowUp.date, "PPP") : <span>Pick a date</span>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={newFollowUp.date}
+                              onSelect={(date: Date | undefined) => {
+                                setNewFollowUp({ ...newFollowUp, date: date || new Date() })
+                                const popoverElement = document.querySelector('[data-radix-popper-content-wrapper]')
+                                if (popoverElement) {
+                                  const closeEvent = new Event('closePopover')
+                                  popoverElement.dispatchEvent(closeEvent)
+                                }
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <Input
+                          type="time"
+                          value={newFollowUp.time}
+                          onChange={(e) => setNewFollowUp({ ...newFollowUp, time: e.target.value })}
+                          className="w-[280px]"
+                        />
+                        <Textarea 
+                          placeholder="Follow-up description..." 
+                          value={newFollowUp.description}
+                          onChange={(e) => setNewFollowUp({ ...newFollowUp, description: e.target.value })}
+                        />
+                        <Button onClick={handleAddFollowUp}>Add Follow-up</Button>
+                      </div>
                     </div>
                   </TabsContent>
                 </Tabs>

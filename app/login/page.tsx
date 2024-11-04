@@ -1,29 +1,39 @@
 'use client'
 
-import { useState } from 'react'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
-import { useToast } from './ui/use-toast'
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useToast } from '@/components/ui/use-toast'
 import { Smartphone } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
-interface PhoneLoginProps {
-  onLogin: (phoneNumber: string) => void
-  userMapping: Record<string, { name: string; phone: string }>
+const USER_MAPPING: Record<string, { name: string; phone: string }> = {
+  '506294302': { name: 'Dr. (CA) Amit Garg', phone: '+971506294302' },
+  '543323219': { name: 'Mr. Prabhakaran', phone: '+971543323219' },
+  '543323218': { name: 'Mr. Sumesh Paul', phone: '+971543323218' },
 }
 
-export default function PhoneLogin({ onLogin, userMapping }: PhoneLoginProps) {
+export default function LoginPage() {
   const [phoneNumber, setPhoneNumber] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
   const [isVerifying, setIsVerifying] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const { toast } = useToast()
+  const router = useRouter()
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const digits = e.target.value.replace(/\D/g, '')
-    if (digits.length <= 9) {
-      setPhoneNumber(digits)
+  useEffect(() => {
+    // Check if user is already logged in
+    const loggedInUser = localStorage.getItem('loggedInUser')
+    if (loggedInUser) {
+      router.push('/')
     }
+    setLoading(false)
+  }, [router])
+
+  // Show loading state
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>
   }
 
   const sendWhatsAppMessage = async (phone: string, message: string) => {
@@ -51,7 +61,8 @@ export default function PhoneLogin({ onLogin, userMapping }: PhoneLoginProps) {
   const handleSendCode = async () => {
     setLoading(true)
     
-    if (phoneNumber.length !== 9) {
+    const phoneRegex = /^[0-9]{9}$/
+    if (!phoneRegex.test(phoneNumber)) {
       toast({
         title: "Invalid Phone Number",
         description: "Please enter a valid 9-digit phone number",
@@ -61,7 +72,7 @@ export default function PhoneLogin({ onLogin, userMapping }: PhoneLoginProps) {
       return
     }
 
-    if (!userMapping[phoneNumber]) {
+    if (!USER_MAPPING[phoneNumber]) {
       toast({
         title: "User Not Found",
         description: "This phone number is not registered in the system.",
@@ -107,59 +118,70 @@ export default function PhoneLogin({ onLogin, userMapping }: PhoneLoginProps) {
     const storedCode = sessionStorage.getItem('verificationCode')
 
     if (verificationCode === storedCode) {
-      toast({
-        title: "Login Successful",
-        description: `Welcome back, ${userMapping[phoneNumber].name}!`,
-      })
       // Clear the stored code
       sessionStorage.removeItem('verificationCode')
-      // Call onLogin with the full phone number instead of redirecting
-      onLogin(`+971${phoneNumber}`)
+      
+      // Store the user information
+      const userInfo = {
+        phoneNumber: `+971${phoneNumber}`,
+        name: USER_MAPPING[phoneNumber].name
+      }
+      localStorage.setItem('loggedInUser', JSON.stringify(userInfo))
+      
+      toast({
+        title: "Login Successful",
+        description: `Welcome back, ${userInfo.name}!`,
+      })
+
+      // Use replace instead of push to prevent back navigation
+      router.replace('/')
     } else {
       toast({
         title: "Invalid Code",
         description: "The verification code you entered is incorrect.",
         variant: "destructive",
       })
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <Card className="w-[400px]">
         <CardHeader>
-          <CardTitle className="text-2xl">Login with Phone Number</CardTitle>
-          <p className="text-muted-foreground">
+          <CardTitle>Lead Management System</CardTitle>
+          <CardDescription>
             {isVerifying 
               ? "Enter the verification code sent to your phone"
-              : "Enter your phone number to receive a verification code"
+              : "Sign in to your account"
             }
-          </p>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {!isVerifying ? (
               <>
                 <div className="space-y-2">
-                  <label htmlFor="phone" className="text-sm font-medium leading-none flex items-center gap-2">
+                  <div className="flex gap-2">
                     <Smartphone className="h-4 w-4" />
-                    Phone Number
-                  </label>
+                    <span className="text-sm font-medium">Phone Number</span>
+                  </div>
                   <div className="flex">
-                    <div className="flex items-center rounded-l-md border border-r-0 bg-muted px-3">
-                      <span className="text-sm text-muted-foreground">+971</span>
-                    </div>
+                    <span className="inline-flex items-center px-3 text-sm text-gray-900 bg-gray-200 border border-r-0 border-gray-300 rounded-l-md">
+                      +971
+                    </span>
                     <Input
-                      id="phone"
                       type="tel"
                       placeholder="543323218"
                       value={phoneNumber}
-                      onChange={handlePhoneChange}
-                      className="rounded-l-none"
+                      onChange={(e) => setPhoneNumber(e.target.value)}
                       disabled={loading}
+                      className="rounded-l-none"
                     />
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    Enter your 9-digit phone number
+                  </p>
                 </div>
                 <Button 
                   className="w-full" 

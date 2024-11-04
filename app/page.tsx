@@ -1,24 +1,49 @@
 'use client'
 
-import { useState } from 'react'
-import PhoneLogin from '@/components/PhoneLogin'
-import LeadManagementDashboard from '@/components/LeadManagementDashboard'
-import { Lead } from '@/types/lead'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import LeadManagementDashboard from '../components/LeadManagementDashboard'
 
 export default function Home() {
-  const [loggedInUser, setLoggedInUser] = useState<string | null>(null)
+  const [loggedIn, setLoggedIn] = useState(false)
+  const [userInfo, setUserInfo] = useState<{ phoneNumber: string; name: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
-  const handleLogin = (phoneNumber: string) => {
-    setLoggedInUser(phoneNumber)
+  useEffect(() => {
+    // Check if the user is already logged in
+    const storedUserInfo = localStorage.getItem('loggedInUser')
+    if (storedUserInfo) {
+      const parsedUserInfo = JSON.parse(storedUserInfo)
+      setUserInfo(parsedUserInfo)
+      setLoggedIn(true)
+    }
+    setLoading(false)
+  }, [])
+
+  const handleLogout = () => {
+    setLoggedIn(false)
+    setUserInfo(null)
+    localStorage.removeItem('loggedInUser')
+    router.push('/login')
   }
 
-  if (!loggedInUser) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <PhoneLogin onLogin={handleLogin} />
-      </div>
-    )
+  // Show loading state
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>
   }
 
-  return <LeadManagementDashboard userPhoneNumber={loggedInUser} />
+  // Redirect to login if not logged in
+  if (!loggedIn || !userInfo) {
+    router.push('/login')
+    return null
+  }
+
+  return (
+    <LeadManagementDashboard 
+      userPhoneNumber={userInfo.phoneNumber} 
+      userName={userInfo.name}
+      onLogout={handleLogout} 
+    />
+  )
 }

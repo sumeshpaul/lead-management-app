@@ -1,60 +1,77 @@
 import { NextResponse } from 'next/server'
 import twilio from 'twilio'
 
-const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-)
+const accountSid = process.env.TWILIO_ACCOUNT_SID
+const authToken = process.env.TWILIO_AUTH_TOKEN
+const twilioWhatsAppNumber = process.env.TWILIO_WHATSAPP_NUMBER
+
+// Validate environment variables
+if (!accountSid || !authToken || !twilioWhatsAppNumber) {
+  console.error('Missing required Twilio environment variables')
+}
+
+// Ensure WhatsApp number is properly formatted
+const formatWhatsAppNumber = (number: string): string => {
+  // Remove any existing 'whatsapp:' prefix
+  const cleanNumber = number.replace('whatsapp:', '')
+  // Ensure it starts with '+'
+  return `whatsapp:${cleanNumber.startsWith('+') ? cleanNumber : `+${cleanNumber}`}`
+}
 
 export async function POST(request: Request) {
   try {
     const { to, message } = await request.json()
 
-    // Update the regex to accept numbers with or without + prefix
-    const uaeNumberRegex = /^\+?971[0-9]{9}$/;
-    if (!uaeNumberRegex.test(to)) {
-      console.error('Invalid phone number format:', to);
+    if (!to || !message) {
       return NextResponse.json(
-        { error: `Invalid UAE mobile number format: ${to}` },
+        { success: false, error: 'Missing required fields: to or message' },
         { status: 400 }
-      );
+      )
     }
 
-    // Format the number for WhatsApp - ensure it starts with whatsapp:+ and remove any existing + prefix
-    const whatsappNumber = `whatsapp:+${to.replace(/^\+/, '')}`;
-    console.log('Formatted WhatsApp number:', whatsappNumber);
-
-    if (!process.env.TWILIO_WHATSAPP_NUMBER) {
-      throw new Error('Twilio WhatsApp number not configured')
+    // Update the regex to accept numbers with or without + prefix
+    const uaeNumberRegex = /^\+?971[0-9]{9}$/
+    if (!uaeNumberRegex.test(to)) {
+      console.error('Invalid phone number format:', to)
+      return NextResponse.json(
+        { success: false, error: `Invalid UAE mobile number format: ${to}` },
+        { status: 400 }
+      )
     }
 
-    console.log('Attempting to send WhatsApp message:', {
-      to: whatsappNumber,
-      from: process.env.TWILIO_WHATSAPP_NUMBER,
+    // Format the number for WhatsApp - ensure it starts with + and remove any existing + prefix
+    const formattedToNumber = formatWhatsAppNumber(to)
+
+    if (!accountSid || !authToken || !twilioWhatsAppNumber) {
+      console.error('Missing Twilio configuration')
+      return NextResponse.json(
+        { success: false, error: 'WhatsApp service not configured properly' },
+        { status: 500 }
+      )
+    }
+
+    const formattedFromNumber = formatWhatsAppNumber(twilioWhatsAppNumber)
+
+    console.log('Sending WhatsApp message:', {
+      to: formattedToNumber,
+      from: formattedFromNumber,
       body: message
-    });
+    })
 
+    const client = twilio(accountSid, authToken)
     const result = await client.messages.create({
       body: message,
-      to: whatsappNumber,
-      from: process.env.TWILIO_WHATSAPP_NUMBER,
-    }).catch(error => {
-      console.error('Detailed Twilio error:', {
-        code: error.code,
-        message: error.message,
-        moreInfo: error.moreInfo
-      });
-      throw new Error(`Twilio error: ${error.message}`);
+      from: formattedFromNumber,
+      to: formattedToNumber
     })
 
     console.log(`WhatsApp message sent with SID: ${result.sid}`)
-
     return NextResponse.json({ success: true, sid: result.sid })
   } catch (error) {
-    console.error('Error sending WhatsApp message:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Failed to send WhatsApp message'
+    console.error('Error processing WhatsApp message request:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to process WhatsApp message request'
     return NextResponse.json(
-      { error: errorMessage },
+      { success: false, error: errorMessage },
       { status: 500 }
     )
   }
