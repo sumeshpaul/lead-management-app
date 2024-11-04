@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import PhoneLogin from '@/components/PhoneLogin'
 import LeadManagementDashboard from '@/components/LeadManagementDashboard'
+import { Lead } from '@/types/lead'
 
 export default function Home() {
   const [loggedInUser, setLoggedInUser] = useState<string | null>(null)
