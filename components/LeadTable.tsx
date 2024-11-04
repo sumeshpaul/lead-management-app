@@ -1,5 +1,5 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Lead } from "@/app/page"
+import { Lead } from "@/types/lead"
 
 interface LeadTableProps {
   leads: Lead[]
