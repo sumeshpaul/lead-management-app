@@ -1,109 +1,48 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { Smartphone } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-
-const USER_MAPPING: Record<string, { name: string; phone: string }> = {
-  '506294302': { name: 'Dr. (CA) Amit Garg', phone: '+971506294302' },
-  '543323219': { name: 'Mr. Prabhakaran', phone: '+971543323219' },
-  '543323218': { name: 'Mr. Sumesh Paul', phone: '+971543323218' },
-}
 
 export default function LoginPage() {
   const [phoneNumber, setPhoneNumber] = useState('')
   const [verificationCode, setVerificationCode] = useState('')
   const [isVerifying, setIsVerifying] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
 
-  useEffect(() => {
-    // Check if user is already logged in
-    const loggedInUser = localStorage.getItem('loggedInUser')
-    if (loggedInUser) {
-      router.push('/')
-    }
-    setLoading(false)
-  }, [router])
-
-  // Show loading state
-  if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>
-  }
-
-  const sendWhatsAppMessage = async (phone: string, message: string) => {
-    try {
-      const response = await fetch('/api/send-whatsapp', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: phone,
-          message: message,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to send WhatsApp message')
-      }
-    } catch (error) {
-      console.error('Error sending WhatsApp message:', error)
-      throw error
-    }
-  }
-
   const handleSendCode = async () => {
     setLoading(true)
-    
-    const phoneRegex = /^[0-9]{9}$/
-    if (!phoneRegex.test(phoneNumber)) {
-      toast({
-        title: "Invalid Phone Number",
-        description: "Please enter a valid 9-digit phone number",
-        variant: "destructive",
-      })
-      setLoading(false)
-      return
-    }
-
-    if (!USER_MAPPING[phoneNumber]) {
-      toast({
-        title: "User Not Found",
-        description: "This phone number is not registered in the system.",
-        variant: "destructive",
-      })
-      setLoading(false)
-      return
-    }
-
     try {
-      // Generate a random 6-digit code
-      const code = Math.floor(100000 + Math.random() * 900000).toString()
-      
-      // Send the code via WhatsApp
-      await sendWhatsAppMessage(
-        `+971${phoneNumber}`,
-        `Your verification code for Lead Management System is: ${code}`
-      )
-
-      // Store the code securely (in a real app, this should be done server-side)
-      sessionStorage.setItem('verificationCode', code)
-      
-      setIsVerifying(true)
-      toast({
-        title: "Verification Code Sent",
-        description: "Please check your WhatsApp for the verification code.",
+      const response = await fetch('/api/auth/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: `+971${phoneNumber}` }),
       })
+
+      if (response.ok) {
+        setIsVerifying(true)
+        toast({
+          title: "Verification Code Sent",
+          description: "Please check your WhatsApp for the verification code.",
+        })
+      } else {
+        const errorData = await response.json()
+        toast({
+          title: "Error",
+          description: errorData.error || "Failed to send verification code.",
+          variant: "destructive",
+        })
+      }
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to send verification code. Please try again.",
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -113,34 +52,42 @@ export default function LoginPage() {
 
   const handleVerifyCode = async () => {
     setLoading(true)
-
-    // Get the stored code (in a real app, this verification should be done server-side)
-    const storedCode = sessionStorage.getItem('verificationCode')
-
-    if (verificationCode === storedCode) {
-      // Clear the stored code
-      sessionStorage.removeItem('verificationCode')
-      
-      // Store the user information
-      const userInfo = {
-        phoneNumber: `+971${phoneNumber}`,
-        name: USER_MAPPING[phoneNumber].name
-      }
-      localStorage.setItem('loggedInUser', JSON.stringify(userInfo))
-      
-      toast({
-        title: "Login Successful",
-        description: `Welcome back, ${userInfo.name}!`,
+    try {
+      const response = await fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          phoneNumber: `+971${phoneNumber}`,
+          code: verificationCode 
+        }),
       })
 
-      // Use replace instead of push to prevent back navigation
-      router.replace('/')
-    } else {
+      if (response.ok) {
+        const data = await response.json()
+        localStorage.setItem('token', data.token)
+        localStorage.setItem('user', JSON.stringify(data.user))
+        
+        toast({
+          title: "Login Successful",
+          description: `Welcome back, ${data.user.name}!`,
+        })
+
+        router.push('/dashboard')
+      } else {
+        const errorData = await response.json()
+        toast({
+          title: "Invalid Code",
+          description: errorData.error || "The verification code you entered is incorrect.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
       toast({
-        title: "Invalid Code",
-        description: "The verification code you entered is incorrect.",
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       })
+    } finally {
       setLoading(false)
     }
   }

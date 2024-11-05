@@ -6,6 +6,8 @@ interface TwilioError extends Error {
   status: number;
 }
 
+const DEBUG = process.env.NODE_ENV !== 'production'
+
 export async function POST(request: Request) {
   // Debug logging for environment variables
   const envVars = {
@@ -14,7 +16,9 @@ export async function POST(request: Request) {
     phoneNumber: process.env.TWILIO_PHONE_NUMBER,
   }
   
-  console.log('Environment variables state:', envVars)
+  if (DEBUG) {
+    console.log('Environment variables state:', envVars)
+  }
 
   const accountSid = process.env.TWILIO_ACCOUNT_SID
   const authToken = process.env.TWILIO_AUTH_TOKEN
@@ -44,8 +48,15 @@ export async function POST(request: Request) {
   try {
     const { to, message } = await request.json()
 
+    if (DEBUG) {
+      console.log('Received request:', { to, messagePreview: message.substring(0, 50) + (message.length > 50 ? '...' : '') })
+    }
+
     // Validate request body
     if (!to || !message) {
+      if (DEBUG) {
+        console.log('Invalid request:', { to, message })
+      }
       return NextResponse.json(
         {
           success: false,
@@ -53,7 +64,7 @@ export async function POST(request: Request) {
           details: 'Both "to" and "message" fields are required',
         },
         { status: 400 }
-    )
+      )
     }
 
     // Ensure 'to' is an array
@@ -69,17 +80,21 @@ export async function POST(request: Request) {
 
     // Initialize Twilio client
     const client = twilio(accountSid, authToken)
-    console.log('Twilio client initialized successfully')
+    if (DEBUG) {
+      console.log('Twilio client initialized successfully')
+    }
 
     // Send messages to all recipients
     const results = await Promise.all(
       recipients.map(async (recipient) => {
         const toNumber = formatWhatsAppNumber(recipient)
-        console.log('Attempting to send WhatsApp message:', {
-          to: toNumber,
-          from: fromNumber,
-          messagePreview: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
-        })
+        if (DEBUG) {
+          console.log('Attempting to send WhatsApp message:', {
+            to: toNumber,
+            from: fromNumber,
+            messagePreview: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
+          })
+        }
 
         try {
           const result = await client.messages.create({
@@ -88,11 +103,13 @@ export async function POST(request: Request) {
             to: toNumber,
           })
 
-          console.log('WhatsApp message sent successfully:', {
-            to: toNumber,
-            sid: result.sid,
-            status: result.status,
-          })
+          if (DEBUG) {
+            console.log('WhatsApp message sent successfully:', {
+              to: toNumber,
+              sid: result.sid,
+              status: result.status,
+            })
+          }
 
           return { success: true, to: toNumber, sid: result.sid, status: result.status }
         } catch (error) {
@@ -119,6 +136,13 @@ export async function POST(request: Request) {
 
     const successfulSends = results.filter((result) => result.success)
     const failedSends = results.filter((result) => !result.success)
+
+    if (DEBUG) {
+      console.log('WhatsApp sending results:', {
+        totalSent: successfulSends.length,
+        totalFailed: failedSends.length,
+      })
+    }
 
     return NextResponse.json({
       success: failedSends.length === 0,

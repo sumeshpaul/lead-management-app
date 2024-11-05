@@ -1,26 +1,46 @@
-export async function sendWhatsApp(to: string, message: string) {
-  try {
-    const response = await fetch('/api/send-whatsapp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ to, message }),
-    })
+import axios from 'axios';
+import { logError } from './logger';
 
-    const data = await response.json()
+const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL;
+const WHATSAPP_API_TOKEN = process.env.WHATSAPP_API_TOKEN;
+const MAX_RETRIES = 3;
 
-    if (!response.ok) {
-      console.error('WhatsApp API error:', data)
-      throw new Error(data.error || 'Failed to send WhatsApp message')
-    }
+export async function sendWhatsApp(to: string, message: string): Promise<void> {
+  if (!WHATSAPP_API_URL) {
+    throw new Error('WHATSAPP_API_URL is not defined');
+  }
 
-    return { success: true, messageId: data.sid }
-  } catch (error) {
-    console.error('Error sending WhatsApp message:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to send WhatsApp message'
+  let retries = 0;
+  while (retries < MAX_RETRIES) {
+    try {
+      const response = await axios.post(
+        WHATSAPP_API_URL,
+        {
+          to,
+          message,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.status === 200) {
+        console.log('WhatsApp message sent successfully');
+        return;
+      }
+      throw new Error(`WhatsApp API responded with status ${response.status}`);
+    } catch (error) {
+      logError(error as Error, { service: 'whatsapp-service', method: 'sendWhatsApp', to, attempt: retries + 1 });
+      console.error(`Failed to send WhatsApp message (attempt ${retries + 1}):`, error);
+      retries++;
+      if (retries >= MAX_RETRIES) {
+        throw error;
+      }
+      // Wait for a short time before retrying
+      await new Promise(resolve => setTimeout(resolve, 1000 * retries));
     }
   }
 }
