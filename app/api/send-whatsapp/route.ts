@@ -12,8 +12,8 @@ if (!accountSid || !authToken || !twilioWhatsAppNumber) {
 
 // Ensure WhatsApp number is properly formatted
 const formatWhatsAppNumber = (number: string): string => {
-  // Remove any existing 'whatsapp:' prefix
-  const cleanNumber = number.replace('whatsapp:', '')
+  // Remove any existing 'whatsapp:' prefix and spaces
+  const cleanNumber = number.replace(/whatsapp:|\s/g, '')
   // Ensure it starts with '+'
   return `whatsapp:${cleanNumber.startsWith('+') ? cleanNumber : `+${cleanNumber}`}`
 }
@@ -29,18 +29,15 @@ export async function POST(request: Request) {
       )
     }
 
-    // Update the regex to accept numbers with or without + prefix
-    const uaeNumberRegex = /^\+?971[0-9]{9}$/
-    if (!uaeNumberRegex.test(to)) {
+    // Update the regex to accept numbers with or without + prefix, and allow for optional spaces
+    const uaeNumberRegex = /^\+?971\s?[0-9]{9}$/
+    if (!uaeNumberRegex.test(to.replace(/\s/g, ''))) {
       console.error('Invalid phone number format:', to)
       return NextResponse.json(
         { success: false, error: `Invalid UAE mobile number format: ${to}` },
         { status: 400 }
       )
     }
-
-    // Format the number for WhatsApp - ensure it starts with + and remove any existing + prefix
-    const formattedToNumber = formatWhatsAppNumber(to)
 
     if (!accountSid || !authToken || !twilioWhatsAppNumber) {
       console.error('Missing Twilio configuration')
@@ -50,6 +47,8 @@ export async function POST(request: Request) {
       )
     }
 
+    // Format the numbers for WhatsApp
+    const formattedToNumber = formatWhatsAppNumber(to)
     const formattedFromNumber = formatWhatsAppNumber(twilioWhatsAppNumber)
 
     console.log('Sending WhatsApp message:', {
