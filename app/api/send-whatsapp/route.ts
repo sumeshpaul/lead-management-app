@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import twilio from 'twilio'
 
-// Define a type for Twilio errors
 interface TwilioError extends Error {
   code: string;
   status: number;
@@ -12,21 +11,21 @@ export async function POST(request: Request) {
   const envVars = {
     accountSid: process.env.TWILIO_ACCOUNT_SID?.slice(0, 4) + '...',
     authToken: process.env.TWILIO_AUTH_TOKEN ? 'present' : 'missing',
-    phoneNumber: process.env.TWILIO_WHATSAPP_NUMBER,
+    phoneNumber: process.env.TWILIO_PHONE_NUMBER, // Changed from TWILIO_WHATSAPP_NUMBER
   }
   
   console.log('Environment variables state:', envVars)
 
   const accountSid = process.env.TWILIO_ACCOUNT_SID
   const authToken = process.env.TWILIO_AUTH_TOKEN
-  const twilioWhatsAppNumber = process.env.TWILIO_WHATSAPP_NUMBER
+  const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER // Changed from TWILIO_WHATSAPP_NUMBER
 
   // Validate environment variables
-  if (!accountSid || !authToken || !twilioWhatsAppNumber) {
+  if (!accountSid || !authToken || !twilioPhoneNumber) {
     const missingVars = {
       accountSid: !accountSid,
       authToken: !authToken,
-      whatsappNumber: !twilioWhatsAppNumber,
+      phoneNumber: !twilioPhoneNumber,
     }
     console.error('Missing environment variables:', missingVars)
     return NextResponse.json(
@@ -64,7 +63,7 @@ export async function POST(request: Request) {
     }
 
     const toNumber = formatWhatsAppNumber(to)
-    const fromNumber = formatWhatsAppNumber(twilioWhatsAppNumber)
+    const fromNumber = formatWhatsAppNumber(twilioPhoneNumber)
 
     console.log('Attempting to send WhatsApp message:', {
       to: toNumber,
