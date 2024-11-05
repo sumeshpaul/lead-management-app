@@ -16,6 +16,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
+import { sendWhatsAppMessages, formatTimestamp } from '@/lib/utils'
 
 const USER_MAPPING: Record<string, { name: string; phone: string }> = {
   '+971506294302': { name: 'Dr. (CA) Amit Garg', phone: '+971506294302' },
@@ -41,37 +42,6 @@ const canUpdateStatus = (lead: Lead, userPhone: string, newStatus: LeadStatus) =
 
 const formatUserDisplay = (phoneNumber: string) => {
   return USER_MAPPING[phoneNumber]?.name || phoneNumber
-}
-
-const sendWhatsAppMessages = async (message: string) => {
-  const phoneNumbers = Object.values(USER_MAPPING).map(user => user.phone)
-  const results = await Promise.all(phoneNumbers.map(async (to) => {
-    try {
-      const response = await fetch('/api/send-whatsapp', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ to, message }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to send WhatsApp message')
-      }
-
-      return await response.json()
-    } catch (error) {
-      console.error(`Error sending WhatsApp message to ${to}:`, error)
-      return { error: true, to }
-    }
-  }))
-
-  const failures = results.filter(result => result.error)
-  if (failures.length > 0) {
-    throw new Error(`Failed to send WhatsApp messages to ${failures.length} recipients`)
-  }
-
-  return results
 }
 
 export type Division = 'Real Estate Consulting' | 'Management Consulting' | 'Trading' | 'Real Estate Brokerage' | 'M&A and Private Equity'
@@ -194,39 +164,18 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
 
   const { toast } = useToast()
 
-  const formatTimestamp = () => {
-    return new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-      timeZone: 'Asia/Dubai'  // Set to UAE timezone
-    }).format(new Date())
-  }
-
   const handleSelectLead = (lead: Lead) => {
     setSelectedLead(lead)
   }
 
-  const handleAddLead = async () => {
-    if (!newLead.title?.trim() || !newLead.division || !newLead.assignedTo?.trim()) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      })
-      return
-    }
-
+  const createNewLead = (newLeadData: Partial<Lead>): Lead => {
     const timestamp = formatTimestamp()
-    const lead: Lead = {
+    return {
       id: (leads.length + 1).toString(),
-      title: newLead.title,
-      division: newLead.division,
-      status: newLead.status as LeadStatus,
-      assignedTo: newLead.assignedTo,
+      title: newLeadData.title || '',
+      division: newLeadData.division || 'Real Estate Consulting',
+      status: newLeadData.status || 'New',
+      assignedTo: newLeadData.assignedTo || '',
       lastUpdated: new Date().toISOString().split('T')[0],
       comments: [],
       activities: [{
@@ -237,29 +186,61 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
       }],
       followUps: [],
     }
+  }
 
-    setLeads([...leads, lead])
+  const validateNewLead = (lead: Partial<Lead>): boolean => {
+    return !!(lead.title?.trim() && lead.division && lead.assignedTo?.trim())
+  }
+
+  const resetNewLeadForm = () => {
     setNewLead({
       title: '',
       division: undefined,
       status: 'New',
       assignedTo: '',
     })
+  }
 
+  const notifyTeamAboutNewLead = async (lead: Lead) => {
     const message = `New lead added: "${lead.title}" has been assigned to ${lead.assignedTo}. Please check the dashboard for details.`
+    await sendWhatsAppMessages(message)
+  }
+
+  const showSuccessToast = (lead: Lead) => {
+    toast({
+      title: "Lead Added Successfully",
+      description: `${lead.title} has been assigned to ${lead.assignedTo}. WhatsApp notifications sent to all team members.`,
+      variant: "default",
+    })
+  }
+
+  const showErrorToast = (lead: Lead) => {
+    toast({
+      title: "Lead Added",
+      description: `${lead.title} has been assigned to ${lead.assignedTo}, but some WhatsApp notifications failed.`,
+      variant: "default",
+    })
+  }
+
+  const handleAddLead = async () => {
+    if (!validateNewLead(newLead)) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const lead = createNewLead(newLead)
+    setLeads([...leads, lead])
+    resetNewLeadForm()
+
     try {
-      await sendWhatsAppMessages(message)
-      toast({
-        title: "Lead Added Successfully",
-        description: `${lead.title} has been assigned to ${lead.assignedTo}. WhatsApp notifications sent to all team members.`,
-        variant: "default",
-      })
+      await notifyTeamAboutNewLead(lead)
+      showSuccessToast(lead)
     } catch (error) {
-      toast({
-        title: "Lead Added",
-        description: `${lead.title} has been assigned to ${lead.assignedTo}, but some WhatsApp notifications failed.`,
-        variant: "default",
-      })
+      showErrorToast(lead)
     }
   }
 
@@ -393,6 +374,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
       lead.id === updatedLead.id ? updatedLead : lead
     )
     setLeads(updatedLeads)
+    
     setSelectedLead(updatedLead)
     setNewFollowUp({ date: new Date(), time: '09:00', description: '' })
 
@@ -414,7 +396,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl  font-bold">Lead Management Dashboard</h1>
+        <h1 className="text-3xl font-bold">Lead Management Dashboard</h1>
         <div className="flex items-center gap-4">
           <span>Logged in as: {userName} ({userPhoneNumber})</span>
           <Button variant="outline" onClick={onLogout}>Logout</Button>
