@@ -11,14 +11,14 @@ export async function POST(request: Request) {
   const envVars = {
     accountSid: process.env.TWILIO_ACCOUNT_SID?.slice(0, 4) + '...',
     authToken: process.env.TWILIO_AUTH_TOKEN ? 'present' : 'missing',
-    phoneNumber: process.env.TWILIO_PHONE_NUMBER, // Changed from TWILIO_WHATSAPP_NUMBER
+    phoneNumber: process.env.TWILIO_PHONE_NUMBER,
   }
   
   console.log('Environment variables state:', envVars)
 
   const accountSid = process.env.TWILIO_ACCOUNT_SID
   const authToken = process.env.TWILIO_AUTH_TOKEN
-  const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER // Changed from TWILIO_WHATSAPP_NUMBER
+  const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER
 
   // Validate environment variables
   if (!accountSid || !authToken || !twilioPhoneNumber) {
@@ -53,8 +53,11 @@ export async function POST(request: Request) {
           details: 'Both "to" and "message" fields are required',
         },
         { status: 400 }
-      )
+    )
     }
+
+    // Ensure 'to' is an array
+    const recipients = Array.isArray(to) ? to : [to]
 
     // Format WhatsApp numbers
     const formatWhatsAppNumber = (number: string): string => {
@@ -62,54 +65,67 @@ export async function POST(request: Request) {
       return `whatsapp:${cleaned.startsWith('+') ? cleaned : `+${cleaned}`}`
     }
 
-    const toNumber = formatWhatsAppNumber(to)
     const fromNumber = formatWhatsAppNumber(twilioPhoneNumber)
 
-    console.log('Attempting to send WhatsApp message:', {
-      to: toNumber,
-      from: fromNumber,
-      messagePreview: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
-    })
-
     // Initialize Twilio client
-    try {
-      const client = twilio(accountSid, authToken)
-      console.log('Twilio client initialized successfully')
+    const client = twilio(accountSid, authToken)
+    console.log('Twilio client initialized successfully')
 
-      // Send message
-      const result = await client.messages.create({
-        body: message,
-        from: fromNumber,
-        to: toNumber,
-      })
+    // Send messages to all recipients
+    const results = await Promise.all(
+      recipients.map(async (recipient) => {
+        const toNumber = formatWhatsAppNumber(recipient)
+        console.log('Attempting to send WhatsApp message:', {
+          to: toNumber,
+          from: fromNumber,
+          messagePreview: message.substring(0, 50) + (message.length > 50 ? '...' : ''),
+        })
 
-      console.log('WhatsApp message sent successfully:', {
-        sid: result.sid,
-        status: result.status,
-      })
+        try {
+          const result = await client.messages.create({
+            body: message,
+            from: fromNumber,
+            to: toNumber,
+          })
 
-      return NextResponse.json({
-        success: true,
-        sid: result.sid,
-        status: result.status,
-      })
-    } catch (error) {
-      const twilioError = error as TwilioError;
-      console.error('Twilio client error:', {
-        name: twilioError.name,
-        message: twilioError.message,
-        code: twilioError.code,
-        status: twilioError.status,
-      })
+          console.log('WhatsApp message sent successfully:', {
+            to: toNumber,
+            sid: result.sid,
+            status: result.status,
+          })
 
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to send WhatsApp message',
-        details: twilioError.message,
-        code: twilioError.code,
-        status: twilioError.status,
-      }, { status: 500 })
-    }
+          return { success: true, to: toNumber, sid: result.sid, status: result.status }
+        } catch (error) {
+          const twilioError = error as TwilioError
+          console.error('Twilio client error:', {
+            to: toNumber,
+            name: twilioError.name,
+            message: twilioError.message,
+            code: twilioError.code,
+            status: twilioError.status,
+          })
+
+          return {
+            success: false,
+            to: toNumber,
+            error: 'Failed to send WhatsApp message',
+            details: twilioError.message,
+            code: twilioError.code,
+            status: twilioError.status,
+          }
+        }
+      })
+    )
+
+    const successfulSends = results.filter((result) => result.success)
+    const failedSends = results.filter((result) => !result.success)
+
+    return NextResponse.json({
+      success: failedSends.length === 0,
+      totalSent: successfulSends.length,
+      totalFailed: failedSends.length,
+      results: results,
+    })
   } catch (error) {
     console.error('Request processing error:', error)
     return NextResponse.json({

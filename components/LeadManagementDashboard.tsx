@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
-import { PlusCircle, Edit2, MessageSquare, Clock, Calendar as CalendarIcon } from 'lucide-react'
+import { PlusCircle, Edit2, MessageSquare, Clock, Calendar as CalendarIcon, Send } from 'lucide-react'
 import { useToast } from "./ui/use-toast"
 import { Badge } from './ui/badge'
 import { Textarea } from './ui/textarea'
@@ -16,7 +16,6 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
-import { sendWhatsApp } from '../lib/whatsapp-service'
 
 const USER_MAPPING: Record<string, { name: string; phone: string }> = {
   '+971506294302': { name: 'Dr. (CA) Amit Garg', phone: '+971506294302' },
@@ -44,11 +43,35 @@ const formatUserDisplay = (phoneNumber: string) => {
   return USER_MAPPING[phoneNumber]?.name || phoneNumber
 }
 
-const sendWhatsAppToAllTeamMembers = async (message: string) => {
-  const teamPhones = Object.values(USER_MAPPING).map(user => user.phone)
-  for (const phone of teamPhones) {
-    await sendWhatsApp(phone, message)
+const sendWhatsAppMessages = async (message: string) => {
+  const phoneNumbers = Object.values(USER_MAPPING).map(user => user.phone)
+  const results = await Promise.all(phoneNumbers.map(async (to) => {
+    try {
+      const response = await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ to, message }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to send WhatsApp message')
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Error sending WhatsApp message to ${to}:`, error)
+      return { error: true, to }
+    }
+  }))
+
+  const failures = results.filter(result => result.error)
+  if (failures.length > 0) {
+    throw new Error(`Failed to send WhatsApp messages to ${failures.length} recipients`)
   }
+
+  return results
 }
 
 export type Division = 'Real Estate Consulting' | 'Management Consulting' | 'Trading' | 'Real Estate Brokerage' | 'M&A and Private Equity'
@@ -223,14 +246,21 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
       assignedTo: '',
     })
 
-    const message = `New lead assigned: "${lead.title}" has been assigned to ${lead.assignedTo}. Please check the dashboard for details.`
-    await sendWhatsAppToAllTeamMembers(message)
-
-    toast({
-      title: "Lead Added Successfully",
-      description: `${lead.title} has been assigned to ${lead.assignedTo}. WhatsApp notifications sent to all team members.`,
-      variant: "default",
-    })
+    const message = `New lead added: "${lead.title}" has been assigned to ${lead.assignedTo}. Please check the dashboard for details.`
+    try {
+      await sendWhatsAppMessages(message)
+      toast({
+        title: "Lead Added Successfully",
+        description: `${lead.title} has been assigned to ${lead.assignedTo}. WhatsApp notifications sent to all team members.`,
+        variant: "default",
+      })
+    } catch (error) {
+      toast({
+        title: "Lead Added",
+        description: `${lead.title} has been assigned to ${lead.assignedTo}, but some WhatsApp notifications failed.`,
+        variant: "default",
+      })
+    }
   }
 
   const handleUpdateLead = async (updatedLead: Lead) => {
@@ -255,12 +285,18 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
     setSelectedLead(finalUpdatedLead)
 
     const message = `Lead "${updatedLead.title}" has been updated by ${formatUserDisplay(userPhoneNumber)}.`
-    await sendWhatsAppToAllTeamMembers(message)
-
-    toast({
-      title: "Lead Updated Successfully",
-      description: `${updatedLead.title} has been updated. WhatsApp notifications sent to all team members.`,
-    })
+    try {
+      await sendWhatsAppMessages(message)
+      toast({
+        title: "Lead Updated Successfully",
+        description: `${updatedLead.title} has been updated. WhatsApp notifications sent to all team members.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Lead Updated",
+        description: `${updatedLead.title} has been updated, but some WhatsApp notifications failed.`,
+      })
+    }
   }
 
   const handleEditClick = () => {
@@ -312,13 +348,20 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
     setNewComment('')
 
     const message = `New comment on lead "${selectedLead.title}" by ${formatUserDisplay(userPhoneNumber)}: ${newComment}`
-    await sendWhatsAppToAllTeamMembers(message)
-
-    toast({
-      title: "Comment Added Successfully",
-      description: `Comment added to ${selectedLead.title}. WhatsApp notifications sent to all team members.`,
-      variant: "default",
-    })
+    try {
+      await sendWhatsAppMessages(message)
+      toast({
+        title: "Comment Added Successfully",
+        description: `Comment added to ${selectedLead.title}. WhatsApp notifications sent to all team members.`,
+        variant: "default",
+      })
+    } catch (error) {
+      toast({
+        title: "Comment Added",
+        description: `Comment added to ${selectedLead.title}, but some WhatsApp notifications failed.`,
+        variant: "default",
+      })
+    }
   }
 
   const handleAddFollowUp = async () => {
@@ -354,20 +397,24 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
     setNewFollowUp({ date: new Date(), time: '09:00', description: '' })
 
     const message = `New follow-up for lead "${selectedLead.title}": ${followUp.description} scheduled for ${format(followUp.date, 'PPP')} at ${followUp.time}`
-    await sendWhatsAppToAllTeamMembers(message)
-
-    toast({
-      title: "Follow-up Added",
-      description: `Follow-up scheduled for ${format(followUp.date, 'PPP')} at ${followUp.time}. WhatsApp notifications sent to all team members.`,
-    })
-
-    console.log(`Reminder set for ${format(followUp.date, 'PPP')} at ${followUp.time}: ${followUp.description}`)
+    try {
+      await sendWhatsAppMessages(message)
+      toast({
+        title: "Follow-up Added",
+        description: `Follow-up scheduled for ${format(followUp.date, 'PPP')} at ${followUp.time}. WhatsApp notifications sent to all team members.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Follow-up Added",
+        description: `Follow-up scheduled for ${format(followUp.date, 'PPP')} at ${followUp.time}, but some WhatsApp notifications failed.`,
+      })
+    }
   }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Lead Management Dashboard</h1>
+        <h1 className="text-3xl  font-bold">Lead Management Dashboard</h1>
         <div className="flex items-center gap-4">
           <span>Logged in as: {userName} ({userPhoneNumber})</span>
           <Button variant="outline" onClick={onLogout}>Logout</Button>
@@ -401,10 +448,10 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                   <SelectValue placeholder="Select Division" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Real Estate Consulting">Real Estate  Consulting</SelectItem>
-                  <SelectItem value="Management Consulting">Management  Consulting</SelectItem>
+                  <SelectItem value="Real Estate Consulting">Real Estate Consulting</SelectItem>
+                  <SelectItem value="Management Consulting">Management Consulting</SelectItem>
                   <SelectItem value="Trading">Trading</SelectItem>
-                  <SelectItem value="Real Estate Brokerage">Real Estate  Brokerage</SelectItem>
+                  <SelectItem value="Real Estate Brokerage">Real Estate Brokerage</SelectItem>
                   <SelectItem value="M&A and Private Equity">M&A and Private Equity</SelectItem>
                 </SelectContent>
               </Select>
@@ -586,7 +633,10 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                           value={newComment}
                           onChange={(e) => setNewComment(e.target.value)}
                         />
-                        <Button onClick={handleAddComment}>Add Comment</Button>
+                        <Button onClick={handleAddComment}>
+                          <Send className="mr-2 h-4 w-4" />
+                          Add Comment
+                        </Button>
                       </div>
                     </div>
                   </TabsContent>
@@ -655,7 +705,10 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                           value={newFollowUp.description}
                           onChange={(e) => setNewFollowUp({ ...newFollowUp, description: e.target.value })}
                         />
-                        <Button onClick={handleAddFollowUp}>Add Follow-up</Button>
+                        <Button onClick={handleAddFollowUp}>
+                          <Send className="mr-2 h-4 w-4" />
+                          Add Follow-up
+                        </Button>
                       </div>
                     </div>
                   </TabsContent>

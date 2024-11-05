@@ -7,7 +7,6 @@ import LeadManagementDashboard from '../components/LeadManagementDashboard'
 export default function Home() {
   const [loggedIn, setLoggedIn] = useState(false)
   const [userInfo, setUserInfo] = useState<{ phoneNumber: string; name: string } | null>(null)
-  const [loading, setLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
@@ -18,31 +17,26 @@ export default function Home() {
       setUserInfo(parsedUserInfo)
       setLoggedIn(true)
     }
-    setLoading(false)
   }, [])
 
   const handleLogout = () => {
     setLoggedIn(false)
     setUserInfo(null)
+    // Clear the stored user information
     localStorage.removeItem('loggedInUser')
+    // Redirect to login page
     router.push('/login')
   }
 
-  // Show loading state
-  if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>
-  }
-
-  // Redirect to login if not logged in
-  if (!loggedIn || !userInfo) {
+  if (!loggedIn) {
     router.push('/login')
-    return null
+    return null // or a loading spinner
   }
 
   return (
     <LeadManagementDashboard 
-      userPhoneNumber={userInfo.phoneNumber} 
-      userName={userInfo.name}
+      userPhoneNumber={userInfo?.phoneNumber || ''} 
+      userName={userInfo?.name || ''}
       onLogout={handleLogout} 
     />
   )
