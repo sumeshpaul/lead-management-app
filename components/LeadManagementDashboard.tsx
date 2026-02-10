@@ -16,11 +16,9 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { cn } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
-import { sendWhatsApp } from '@/lib/whatsapp-service'
-import { Lead, Division, LeadStatus, Comment, Activity, FollowUp } from '@/types/lead'
-import { apiService } from '@/lib/api-service'
+import { Lead, Division, LeadStatus, FollowUp } from '@/types/lead'
+import { apiService, AuthError } from '@/lib/api-service'
 import { logError } from '@/lib/logger'
-import { refreshToken, isTokenExpired } from '@/lib/tokenRefresh'
 
 const USER_MAPPING: Record<string, { name: string; phone: string }> = {
   '+971506294302': { name: 'Dr. (CA) Amit Garg', phone: '+971506294302' },
@@ -79,20 +77,23 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
 
   const { toast } = useToast()
 
+  const handleAuthError = useCallback(() => {
+    onLogout()
+  }, [onLogout])
+
   const fetchLeads = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
-      let token = localStorage.getItem('token')
 
-      if (!token || isTokenExpired(token)) {
-        token = await refreshToken()
-      }
-
-      const data = await apiService.getLeads(page, token)
+      const data = await apiService.getLeads(page)
       setLeads(data.leads)
-      setTotalPages(data.totalPages)
+      setTotalPages(data.totalPages || 1)
     } catch (error) {
+      if (error instanceof AuthError) {
+        handleAuthError()
+        return
+      }
       logError(error as Error, { componentName: 'LeadManagementDashboard', operation: 'fetchLeads' })
       setError(error instanceof Error ? error.message : 'Failed to fetch leads')
       toast({
@@ -103,7 +104,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
     } finally {
       setIsLoading(false)
     }
-  }, [page, toast])
+  }, [page, toast, handleAuthError])
 
   useEffect(() => {
     fetchLeads()
@@ -112,15 +113,10 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
   const handleSelectLead = async (lead: Lead) => {
     try {
       setIsLoading(true)
-      let token = localStorage.getItem('token')
-
-      if (!token || isTokenExpired(token)) {
-        token = await refreshToken()
-      }
 
       const [commentsData, followUpsData] = await Promise.all([
-        apiService.getComments(lead.id, token),
-        apiService.getFollowUps(lead.id, token)
+        apiService.getComments(lead.id),
+        apiService.getFollowUps(lead.id)
       ])
       setSelectedLead({
         ...lead,
@@ -128,6 +124,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
         followUps: followUpsData.followUps
       })
     } catch (error) {
+      if (error instanceof AuthError) { handleAuthError(); return }
       logError(error as Error, { componentName: 'LeadManagementDashboard', operation: 'handleSelectLead', leadId: lead.id })
       toast({
         variant: "destructive",
@@ -151,13 +148,8 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
 
     try {
       setIsLoading(true)
-      let token = localStorage.getItem('token')
 
-      if (!token || isTokenExpired(token)) {
-        token = await refreshToken()
-      }
-
-      const data = await apiService.addLead(newLead as Lead, token)
+      const data = await apiService.addLead(newLead)
       setLeads([data.lead, ...leads])
       setNewLead({
         title: '',
@@ -174,16 +166,13 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
 
       const assignedUserPhone = getUserPhoneNumber(data.lead.assignedTo)
       if (assignedUserPhone) {
-        try {
-          await sendWhatsApp(
-            assignedUserPhone,
-            `New lead assigned: ${data.lead.title} (${data.lead.division}). Status: ${data.lead.status}`
-          )
-        } catch (error) {
-          logError(error as Error, { componentName: 'LeadManagementDashboard', operation: 'handleAddLead', leadId: data.lead.id })
-        }
+        apiService.sendWhatsApp(
+          assignedUserPhone,
+          `New lead assigned: ${data.lead.title} (${data.lead.division}). Status: ${data.lead.status}`
+        ).catch(err => logError(err as Error, { componentName: 'LeadManagementDashboard', operation: 'handleAddLead:whatsapp' }))
       }
     } catch (error) {
+      if (error instanceof AuthError) { handleAuthError(); return }
       logError(error as Error, { componentName: 'LeadManagementDashboard', operation: 'handleAddLead' })
       toast({
         variant: "destructive",
@@ -198,36 +187,28 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
   const handleUpdateLead = async (updatedLead: Lead) => {
     try {
       setIsLoading(true)
-      let token = localStorage.getItem('token')
 
-      if (!token || isTokenExpired(token)) {
-        token = await refreshToken()
-      }
-
-      const data = await apiService.updateLead(updatedLead, token)
-      const updatedLeads = leads.map(lead => 
+      const data = await apiService.updateLead(updatedLead)
+      const updatedLeads = leads.map(lead =>
         lead.id === data.lead.id ? data.lead : lead
       )
       setLeads(updatedLeads)
       setSelectedLead(data.lead)
 
       toast({
-        title: "Lead  Updated Successfully",
+        title: "Lead Updated Successfully",
         description: `${data.lead.title} has been updated.`,
       })
 
       const assignedUserPhone = getUserPhoneNumber(data.lead.assignedTo)
       if (assignedUserPhone) {
-        try {
-          await sendWhatsApp(
-            assignedUserPhone,
-            `Lead updated: ${data.lead.title} (${data.lead.division}). New status: ${data.lead.status}`
-          )
-        } catch (error) {
-          logError(error as Error, { componentName: 'LeadManagementDashboard', operation: 'handleUpdateLead', leadId: data.lead.id })
-        }
+        apiService.sendWhatsApp(
+          assignedUserPhone,
+          `Lead updated: ${data.lead.title} (${data.lead.division}). New status: ${data.lead.status}`
+        ).catch(err => logError(err as Error, { componentName: 'LeadManagementDashboard', operation: 'handleUpdateLead:whatsapp' }))
       }
     } catch (error) {
+      if (error instanceof AuthError) { handleAuthError(); return }
       logError(error as Error, { componentName: 'LeadManagementDashboard', operation: 'handleUpdateLead', leadId: updatedLead.id })
       toast({
         variant: "destructive",
@@ -246,13 +227,8 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
 
     try {
       setIsLoading(true)
-      let token = localStorage.getItem('token')
 
-      if (!token || isTokenExpired(token)) {
-        token = await refreshToken()
-      }
-
-      await apiService.deleteLead(id, token)
+      await apiService.deleteLead(id)
       setLeads(leads.filter(lead => lead.id !== id))
       setSelectedLead(null)
       toast({
@@ -260,6 +236,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
         description: "The lead has been removed from the system.",
       })
     } catch (error) {
+      if (error instanceof AuthError) { handleAuthError(); return }
       logError(error as Error, { componentName: 'LeadManagementDashboard', operation: 'handleDeleteLead', leadId: id })
       toast({
         variant: "destructive",
@@ -291,16 +268,11 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
 
     try {
       setIsLoading(true)
-      let token = localStorage.getItem('token')
-
-      if (!token || isTokenExpired(token)) {
-        token = await refreshToken()
-      }
 
       const data = await apiService.addComment(selectedLead.id, {
         text: newComment,
         author: userPhoneNumber,
-      }, token)
+      })
 
       const updatedLead = {
         ...selectedLead,
@@ -314,7 +286,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
         }],
       }
 
-      setLeads(prevLeads => prevLeads.map(lead => 
+      setLeads(prevLeads => prevLeads.map(lead =>
         lead.id === updatedLead.id ? updatedLead : lead
       ))
       setSelectedLead(updatedLead)
@@ -327,16 +299,13 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
 
       const assignedUserPhone = getUserPhoneNumber(selectedLead.assignedTo)
       if (assignedUserPhone) {
-        try {
-          await sendWhatsApp(
-            assignedUserPhone,
-            `New comment on lead "${selectedLead.title}": ${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}`
-          )
-        } catch (error) {
-          logError(error as Error, { componentName: 'LeadManagementDashboard', operation: 'handleAddComment', leadId: selectedLead.id })
-        }
+        apiService.sendWhatsApp(
+          assignedUserPhone,
+          `New comment on lead "${selectedLead.title}": ${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}`
+        ).catch(err => logError(err as Error, { componentName: 'LeadManagementDashboard', operation: 'handleAddComment:whatsapp' }))
       }
     } catch (error) {
+      if (error instanceof AuthError) { handleAuthError(); return }
       logError(error as Error, { componentName: 'LeadManagementDashboard', operation: 'handleAddComment', leadId: selectedLead.id })
       toast({
         variant: "destructive",
@@ -353,17 +322,12 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
 
     try {
       setIsLoading(true)
-      let token = localStorage.getItem('token')
-
-      if (!token || isTokenExpired(token)) {
-        token = await refreshToken()
-      }
 
       const data = await apiService.addFollowUp(selectedLead.id, {
         description: newFollowUp.description,
         scheduledDate: newFollowUp.scheduledDate,
         scheduledTime: newFollowUp.scheduledTime,
-      }, token)
+      })
 
       const updatedLead = {
         ...selectedLead,
@@ -377,11 +341,11 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
         }],
       }
 
-      setLeads(prevLeads => prevLeads.map(lead => 
+      setLeads(prevLeads => prevLeads.map(lead =>
         lead.id === updatedLead.id ? updatedLead : lead
       ))
       setSelectedLead(updatedLead)
-      setNewFollowUp({ 
+      setNewFollowUp({
         description: '',
         scheduledDate: new Date().toISOString().split('T')[0],
         scheduledTime: '09:00',
@@ -394,16 +358,13 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
 
       const assignedUserPhone = getUserPhoneNumber(selectedLead.assignedTo)
       if (assignedUserPhone) {
-        try {
-          await sendWhatsApp(
-            assignedUserPhone,
-            `New follow-up scheduled for lead "${selectedLead.title}" on ${format(parseISO(data.followUp.scheduledDate), 'PPP')} at ${data.followUp.scheduledTime}`
-          )
-        } catch (error) {
-          logError(error as Error, { componentName: 'LeadManagementDashboard', operation: 'handleAddFollowUp', leadId: selectedLead.id })
-        }
+        apiService.sendWhatsApp(
+          assignedUserPhone,
+          `New follow-up scheduled for lead "${selectedLead.title}" on ${format(parseISO(data.followUp.scheduledDate), 'PPP')} at ${data.followUp.scheduledTime}`
+        ).catch(err => logError(err as Error, { componentName: 'LeadManagementDashboard', operation: 'handleAddFollowUp:whatsapp' }))
       }
     } catch (error) {
+      if (error instanceof AuthError) { handleAuthError(); return }
       logError(error as Error, { componentName: 'LeadManagementDashboard', operation: 'handleAddFollowUp', leadId: selectedLead.id })
       toast({
         variant: "destructive",
@@ -448,7 +409,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
           <Button variant="outline" onClick={onLogout}>Logout</Button>
         </div>
       </div>
-      
+
       <Dialog open={isAddLeadOpen} onOpenChange={setIsAddLeadOpen}>
         <DialogTrigger asChild>
           <Button onClick={() => setIsAddLeadOpen(true)}>
@@ -524,7 +485,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                   <TableCell>{lead.division}</TableCell>
                   <TableCell>{lead.status}</TableCell>
                   <TableCell>{lead.assignedTo}</TableCell>
-                  <TableCell>{format(parseISO(lead.updatedAt), 'PPP')}</TableCell>
+                  <TableCell>{lead.updatedAt ? format(parseISO(lead.updatedAt), 'PPP') : '-'}</TableCell>
                   <TableCell>
                     <Button variant="ghost" size="sm" onClick={() => handleSelectLead(lead)}>
                       <Edit2 className="h-4 w-4" />
@@ -586,8 +547,8 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                       <div>
                         <h3 className="font-semibold mb-2">Status</h3>
                         <div className="flex gap-2">
-                          {['New', 'In Progress', 'Closed', 'Terminated'].map((status) => {
-                            const canUpdate = canUpdateStatus(selectedLead, userPhoneNumber, status as LeadStatus)
+                          {(['New', 'In Progress', 'Closed', 'Terminated'] as const).map((status) => {
+                            const canUpdate = canUpdateStatus(selectedLead, userPhoneNumber, status)
                             return (
                               <Badge
                                 key={status}
@@ -595,12 +556,12 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                                 className={`cursor-pointer ${!canUpdate && 'opacity-50'}`}
                                 onClick={() => {
                                   if (canUpdate) {
-                                    const updatedLead = { ...selectedLead, status: status as LeadStatus }
+                                    const updatedLead = { ...selectedLead, status: status }
                                     handleUpdateLead(updatedLead)
                                   } else {
                                     toast({
                                       variant: "destructive",
-                                      title: "Permission Denie d",
+                                      title: "Permission Denied",
                                       description: "Only the assigned user can close or terminate this lead",
                                     })
                                   }
@@ -617,7 +578,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                         {isEditing ? (
                           <Select
                             value={editedLead?.division}
-                            onValueChange={(value: Division) => 
+                            onValueChange={(value: Division) =>
                               setEditedLead(prev => prev ? { ...prev, division: value } : null)
                             }
                           >
@@ -641,7 +602,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                         {isEditing ? (
                           <Select
                             value={editedLead?.assignedTo}
-                            onValueChange={(value: string) => 
+                            onValueChange={(value: string) =>
                               setEditedLead(prev => prev ? { ...prev, assignedTo: value } : null)
                             }
                           >
@@ -673,13 +634,13 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                         <div key={comment.id} className="bg-muted p-4 rounded-lg">
                           <p className="mb-2">{comment.text}</p>
                           <p className="text-sm text-muted-foreground">
-                            {formatUserDisplay(comment.author)} - {format(parseISO(comment.createdAt), 'PPP')}
+                            {formatUserDisplay(comment.author)} - {comment.createdAt ? format(parseISO(comment.createdAt), 'PPP') : ''}
                           </p>
                         </div>
                       ))}
                       <div className="flex gap-2">
-                        <Textarea 
-                          placeholder="Add a comment..." 
+                        <Textarea
+                          placeholder="Add a comment..."
                           value={newComment}
                           onChange={(e) => setNewComment(e.target.value)}
                         />
@@ -697,7 +658,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                         <div key={activity.id} className="border-l-2 border-primary pl-4">
                           <p>{activity.description}</p>
                           <p className="text-sm text-muted-foreground">
-                            {formatUserDisplay(activity.author)} - {format(parseISO(activity.timestamp), 'PPP')}
+                            {formatUserDisplay(activity.author)} - {activity.timestamp ? format(parseISO(activity.timestamp), 'PPP') : ''}
                           </p>
                         </div>
                       ))}
@@ -710,7 +671,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                         <div key={followUp.id} className="bg-muted p-4 rounded-lg">
                           <p className="mb-2">{followUp.description}</p>
                           <p className="text-sm text-muted-foreground">
-                            Scheduled for: {format(parseISO(followUp.scheduledDate), 'PPP')} at {followUp.scheduledTime}
+                            Scheduled for: {followUp.scheduledDate ? format(parseISO(followUp.scheduledDate), 'PPP') : ''} at {followUp.scheduledTime}
                           </p>
                         </div>
                       ))}
@@ -742,8 +703,8 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                           value={newFollowUp.scheduledTime}
                           onChange={(e) => setNewFollowUp(prev => ({ ...prev, scheduledTime: e.target.value }))}
                         />
-                        <Textarea 
-                          placeholder="Follow-up description..." 
+                        <Textarea
+                          placeholder="Follow-up description..."
                           value={newFollowUp.description}
                           onChange={(e) => setNewFollowUp(prev => ({ ...prev, description: e.target.value }))}
                         />

@@ -48,7 +48,7 @@ export function AddNewLead() {
           />
           <Select
             value={newLead.division}
-            onValueChange={(value) => handleSelectChange('division', value)}
+            onValueChange={(value: string) => handleSelectChange('division', value)}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select Division" />

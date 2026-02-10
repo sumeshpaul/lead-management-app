@@ -1,25 +1,23 @@
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
+import { verifyRequestAuth } from '@/lib/auth';
 
-interface FollowUp {
-  id: string;
-  lead_id: string;
-  description: string;
-  scheduled_date: string;
-  scheduled_time: string;
-  created_at: string;
-}
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const decoded = verifyRequestAuth(request);
+  if (!decoded) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+  const { id } = await params;
   const client = await sql.connect();
-  
+
   try {
-    const { rows } = await client.query<FollowUp>(`
+    const { rows } = await client.query(`
       SELECT id, lead_id, description, scheduled_date, scheduled_time, created_at
       FROM follow_ups
       WHERE lead_id = $1
       ORDER BY scheduled_date ASC, scheduled_time ASC
-    `, [params.id]);
+    `, [id]);
 
     return NextResponse.json({ followUps: rows });
   } catch (error) {
@@ -33,16 +31,21 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
 }
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const decoded = verifyRequestAuth(request);
+  if (!decoded) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
   const client = await sql.connect();
-  
+
   try {
     await client.query('BEGIN');
 
     const { description, scheduledDate, scheduledTime, author } = await request.json();
 
-    // Validation and sanitization
-    if (typeof description !== 'string' || typeof scheduledDate !== 'string' || 
+    if (typeof description !== 'string' || typeof scheduledDate !== 'string' ||
         typeof scheduledTime !== 'string' || typeof author !== 'string') {
       return NextResponse.json(
         { error: 'Invalid input types' },
@@ -62,18 +65,16 @@ export async function POST(request: Request, { params }: { params: { id: string 
       );
     }
 
-    // Insert the follow-up
-    const { rows } = await client.query<FollowUp>(`
+    const { rows } = await client.query(`
       INSERT INTO follow_ups (lead_id, description, scheduled_date, scheduled_time, created_at)
       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
       RETURNING id, lead_id, description, scheduled_date, scheduled_time, created_at
-    `, [params.id, sanitizedDescription, sanitizedScheduledDate, sanitizedScheduledTime]);
+    `, [id, sanitizedDescription, sanitizedScheduledDate, sanitizedScheduledTime]);
 
-    // Add activity for the new follow-up
     await client.query(`
       INSERT INTO activities (lead_id, description, author, created_at)
       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-    `, [params.id, 'New follow-up scheduled', sanitizedAuthor]);
+    `, [id, 'New follow-up scheduled', sanitizedAuthor]);
 
     await client.query('COMMIT');
 
