@@ -1,17 +1,25 @@
-import { createTables } from '@/app/db/utils'
+import { createTables } from '@/lib/db'
 import { NextResponse } from 'next/server'
+import { verifyRequestAuth } from '@/lib/auth'
 
-export async function GET() {
+export async function POST(request: Request) {
+  const decoded = verifyRequestAuth(request)
+  if (!decoded) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const result = await createTables()
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: 'Database tables created successfully',
       result: {
         createLeadsTable: result.createLeadsTable,
         createCommentsTable: result.createCommentsTable,
         createFollowUpsTable: result.createFollowUpsTable,
         createActivitiesTable: result.createActivitiesTable,
-        createUpdateTrigger: result.createUpdateTrigger
+        createUsersTable: result.createUsersTable,
+        createVerificationCodesTable: result.createVerificationCodesTable,
+        createUpdateTrigger: result.createUpdateTrigger,
       }
     })
   } catch (error) {

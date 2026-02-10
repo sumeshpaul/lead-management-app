@@ -25,7 +25,7 @@ export default function LeadTable({ leads, onSelectLead }: LeadTableProps) {
             <TableCell>{lead.division}</TableCell>
             <TableCell>{lead.status}</TableCell>
             <TableCell>{lead.assignedTo}</TableCell>
-            <TableCell>{lead.lastUpdated}</TableCell>
+            <TableCell>{lead.updatedAt}</TableCell>
           </TableRow>
         ))}
       </TableBody>

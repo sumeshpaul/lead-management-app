@@ -56,17 +56,17 @@ export default function LoginPage() {
       const response = await fetch('/api/auth/verify-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           phoneNumber: `+971${phoneNumber}`,
-          code: verificationCode 
+          code: verificationCode
         }),
       })
 
       if (response.ok) {
         const data = await response.json()
-        localStorage.setItem('token', data.token)
+        // Store user info only (token is in HttpOnly cookie)
         localStorage.setItem('user', JSON.stringify(data.user))
-        
+
         toast({
           title: "Login Successful",
           description: `Welcome back, ${data.user.name}!`,
@@ -98,7 +98,7 @@ export default function LoginPage() {
         <CardHeader>
           <CardTitle>Lead Management System</CardTitle>
           <CardDescription>
-            {isVerifying 
+            {isVerifying
               ? "Enter the verification code sent to your phone"
               : "Sign in to your account"
             }
@@ -130,8 +130,8 @@ export default function LoginPage() {
                     Enter your 9-digit phone number
                   </p>
                 </div>
-                <Button 
-                  className="w-full" 
+                <Button
+                  className="w-full"
                   onClick={handleSendCode}
                   disabled={loading}
                 >
@@ -154,15 +154,15 @@ export default function LoginPage() {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Button 
-                    className="w-full" 
+                  <Button
+                    className="w-full"
                     onClick={handleVerifyCode}
                     disabled={loading}
                   >
                     {loading ? "Verifying..." : "Verify Code"}
                   </Button>
-                  <Button 
-                    variant="link" 
+                  <Button
+                    variant="link"
                     className="w-full"
                     onClick={() => {
                       setIsVerifying(false)

@@ -1,91 +1,69 @@
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
-
-interface Lead {
-  id: string;
-  title: string;
-  division: string;
-  status: string;
-  assignedTo: string;
-  created_at: string;
-  updated_at: string;
-  followUps: any[];
-  comments: any[];
-  activities: Activity[];
-}
-
-interface Activity {
-  id: string;
-  description: string;
-  author: string;
-  created_at: string;
-}
-
-async function sendWhatsAppNotification(phoneNumber: string, leadTitle: string) {
-  try {
-    const response = await fetch('/api/send-whatsapp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        to: phoneNumber,
-        message: `New lead created: ${leadTitle}. Please check the system for details.`,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to send WhatsApp notification');
-    }
-  } catch (error) {
-    console.error('WhatsApp notification error:', error);
-  }
-}
+import { verifyRequestAuth } from '@/lib/auth';
+import { sendWhatsAppVerification } from '@/lib/twilio-service';
 
 export async function GET(request: Request) {
-  const token = request.headers.get('Authorization')?.split(' ')[1];
-  if (!token) {
-    return NextResponse.json({ error: 'No token provided' }, { status: 401 });
+  const decoded = verifyRequestAuth(request);
+  if (!decoded) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const decoded = verifyToken(token);
-  if (!decoded) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-  }
+  const { searchParams } = new URL(request.url);
+  const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+  const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '10')));
+  const offset = (page - 1) * limit;
 
   const client = await sql.connect();
-  
+
   try {
-    const { rows } = await client.query(`
-      SELECT 
-        id, 
-        title, 
-        division, 
-        status, 
+    // Get total count for pagination
+    const countResult = await client.query('SELECT COUNT(*) as total FROM leads');
+    const total = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(total / limit);
+
+    // Get paginated leads
+    const { rows: leads } = await client.query(`
+      SELECT
+        id,
+        title,
+        division,
+        status,
         assigned_to as "assignedTo",
         created_at,
         updated_at
       FROM leads
       ORDER BY created_at DESC
-    `);
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
 
-    const leads: Lead[] = await Promise.all(rows.map(async (lead) => {
-      const [followUps, comments, activities] = await Promise.all([
-        client.query('SELECT * FROM follow_ups WHERE lead_id = $1', [lead.id]),
-        client.query('SELECT * FROM comments WHERE lead_id = $1', [lead.id]),
-        client.query('SELECT * FROM activities WHERE lead_id = $1', [lead.id])
-      ]);
+    if (leads.length === 0) {
+      return NextResponse.json({ leads: [], totalPages, page });
+    }
 
-      return {
-        ...lead,
-        followUps: followUps.rows,
-        comments: comments.rows,
-        activities: activities.rows
-      };
+    // Batch fetch related data to avoid N+1 queries
+    const leadIds = leads.map(l => l.id);
+    const placeholders = leadIds.map((_, i) => `$${i + 1}`).join(',');
+
+    const [followUpsResult, commentsResult, activitiesResult] = await Promise.all([
+      client.query(`SELECT * FROM follow_ups WHERE lead_id IN (${placeholders})`, leadIds),
+      client.query(`SELECT * FROM comments WHERE lead_id IN (${placeholders})`, leadIds),
+      client.query(`SELECT * FROM activities WHERE lead_id IN (${placeholders})`, leadIds),
+    ]);
+
+    // Group by lead_id
+    const followUpsByLead = groupBy(followUpsResult.rows, 'lead_id');
+    const commentsByLead = groupBy(commentsResult.rows, 'lead_id');
+    const activitiesByLead = groupBy(activitiesResult.rows, 'lead_id');
+
+    const enrichedLeads = leads.map(lead => ({
+      ...lead,
+      followUps: followUpsByLead[lead.id] || [],
+      comments: commentsByLead[lead.id] || [],
+      activities: activitiesByLead[lead.id] || [],
     }));
 
-    return NextResponse.json({ leads });
+    return NextResponse.json({ leads: enrichedLeads, totalPages, page });
   } catch (error) {
     console.error('Database Error:', error);
     return NextResponse.json(
@@ -98,24 +76,18 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const token = request.headers.get('Authorization')?.split(' ')[1];
-  if (!token) {
-    return NextResponse.json({ error: 'No token provided' }, { status: 401 });
-  }
-
-  const decoded = verifyToken(token);
+  const decoded = verifyRequestAuth(request);
   if (!decoded) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const client = await sql.connect();
-  
+
   try {
     await client.query('BEGIN');
 
     const { title, division, assignedTo } = await request.json();
 
-    // Validation and sanitization
     if (typeof title !== 'string' || typeof division !== 'string' || typeof assignedTo !== 'string') {
       return NextResponse.json(
         { error: 'Invalid input types' },
@@ -134,21 +106,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // Insert the lead
     const { rows } = await client.query(`
       INSERT INTO leads (title, division, assigned_to, created_at, updated_at)
       VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      RETURNING 
-        id, 
-        title, 
-        division, 
-        status, 
+      RETURNING
+        id,
+        title,
+        division,
+        status,
         assigned_to as "assignedTo",
         created_at,
         updated_at
     `, [sanitizedTitle, sanitizedDivision, sanitizedAssignedTo]);
 
-    // Add initial activity
     await client.query(`
       INSERT INTO activities (lead_id, description, author, created_at)
       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
@@ -156,10 +126,13 @@ export async function POST(request: Request) {
 
     await client.query('COMMIT');
 
-    // Send WhatsApp notification
-    await sendWhatsAppNotification('+971543323218', sanitizedTitle);
+    // Send WhatsApp notification (non-blocking, don't fail if it errors)
+    sendWhatsAppVerification(
+      decoded.phoneNumber,
+      `New lead created: ${sanitizedTitle}. Assigned to: ${sanitizedAssignedTo}.`
+    ).catch(err => console.error('WhatsApp notification error:', err));
 
-    const lead: Lead = {
+    const lead = {
       ...rows[0],
       followUps: [],
       comments: [],
@@ -182,4 +155,13 @@ export async function POST(request: Request) {
   } finally {
     client.release();
   }
+}
+
+function groupBy<T extends Record<string, any>>(items: T[], key: string): Record<string, T[]> {
+  return items.reduce((groups, item) => {
+    const val = item[key];
+    if (!groups[val]) groups[val] = [];
+    groups[val].push(item);
+    return groups;
+  }, {} as Record<string, T[]>);
 }

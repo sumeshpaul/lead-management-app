@@ -1,9 +1,6 @@
 import '@/styles/globals.css'
-import { Inter } from 'next/font/google'
 import type { Metadata } from 'next'
 import { Toaster } from "@/components/ui/toaster"
-
-const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Lead Management Dashboard',
@@ -17,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className="font-sans">
         {children}
         <Toaster />
       </body>

@@ -141,7 +141,7 @@ export default function LeadDetails({ lead, onUpdateLead, onAddComment, userPhon
                 <div key={comment.id} className="bg-muted p-4 rounded-lg">
                   <p className="mb-2">{comment.text}</p>
                   <p className="text-sm text-muted-foreground">
-                    {comment.author} - {comment.timestamp}
+                    {comment.author} - {comment.createdAt}
                   </p>
                 </div>
               ))}

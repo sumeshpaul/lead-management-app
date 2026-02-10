@@ -1,24 +1,23 @@
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
+import { verifyRequestAuth } from '@/lib/auth';
 
-interface Comment {
-  id: string;
-  lead_id: string;
-  text: string;
-  author: string;
-  created_at: string;
-}
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const decoded = verifyRequestAuth(request);
+  if (!decoded) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+  const { id } = await params;
   const client = await sql.connect();
-  
+
   try {
-    const { rows } = await client.query<Comment>(`
+    const { rows } = await client.query(`
       SELECT id, lead_id, text, author, created_at
       FROM comments
       WHERE lead_id = $1
       ORDER BY created_at DESC
-    `, [params.id]);
+    `, [id]);
 
     return NextResponse.json({ comments: rows });
   } catch (error) {
@@ -32,15 +31,20 @@ export async function GET(request: Request, { params }: { params: { id: string }
   }
 }
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const decoded = verifyRequestAuth(request);
+  if (!decoded) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
   const client = await sql.connect();
-  
+
   try {
     await client.query('BEGIN');
 
     const { text, author } = await request.json();
 
-    // Validation and sanitization
     if (typeof text !== 'string' || typeof author !== 'string') {
       return NextResponse.json(
         { error: 'Invalid input types' },
@@ -58,18 +62,16 @@ export async function POST(request: Request, { params }: { params: { id: string 
       );
     }
 
-    // Insert the comment
-    const { rows } = await client.query<Comment>(`
+    const { rows } = await client.query(`
       INSERT INTO comments (lead_id, text, author, created_at)
       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
       RETURNING id, lead_id, text, author, created_at
-    `, [params.id, sanitizedText, sanitizedAuthor]);
+    `, [id, sanitizedText, sanitizedAuthor]);
 
-    // Add activity for the new comment
     await client.query(`
       INSERT INTO activities (lead_id, description, author, created_at)
       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-    `, [params.id, 'New comment added', sanitizedAuthor]);
+    `, [id, 'New comment added', sanitizedAuthor]);
 
     await client.query('COMMIT');
 

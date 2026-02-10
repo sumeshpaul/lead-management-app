@@ -27,7 +27,7 @@ export async function createTables() {
     const createCommentsTable = await sql`
       CREATE TABLE IF NOT EXISTS comments (
         id SERIAL PRIMARY KEY,
-        lead_id INTEGER REFERENCES leads(id),
+        lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE,
         text TEXT NOT NULL,
         author VARCHAR(100) NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -37,10 +37,29 @@ export async function createTables() {
     const createFollowUpsTable = await sql`
       CREATE TABLE IF NOT EXISTS follow_ups (
         id SERIAL PRIMARY KEY,
-        lead_id INTEGER REFERENCES leads(id),
+        lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE,
         description TEXT NOT NULL,
         scheduled_date DATE NOT NULL,
         scheduled_time TIME NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    const createActivitiesTable = await sql`
+      CREATE TABLE IF NOT EXISTS activities (
+        id SERIAL PRIMARY KEY,
+        lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE,
+        description TEXT NOT NULL,
+        author VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    const createUsersTable = await sql`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        phone_number VARCHAR(20) UNIQUE NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -55,12 +74,40 @@ export async function createTables() {
       );
     `;
 
+    const createUpdateTrigger = await sql`
+      CREATE OR REPLACE FUNCTION update_modified_column()
+      RETURNS TRIGGER AS $$
+      BEGIN
+          NEW.updated_at = now();
+          RETURN NEW;
+      END;
+      $$ language 'plpgsql';
+    `;
+
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_trigger WHERE tgname = 'update_lead_modtime'
+        ) THEN
+          CREATE TRIGGER update_lead_modtime
+            BEFORE UPDATE ON leads
+            FOR EACH ROW
+            EXECUTE FUNCTION update_modified_column();
+        END IF;
+      END
+      $$;
+    `;
+
     console.log('Tables created successfully!');
     return {
       createLeadsTable,
       createCommentsTable,
       createFollowUpsTable,
+      createActivitiesTable,
+      createUsersTable,
       createVerificationCodesTable,
+      createUpdateTrigger,
     };
   } catch (error) {
     console.error('Error creating tables:', error);
