@@ -32,6 +32,9 @@ company stamp and footer.
 - `DMIU_Undertaking_Letter_Ajman_175_signed.pdf` — fully executed version with
   the workforce stated as **175** and the original signature, UAE PASS
   digital-signature block and company stamp retained.
+- `DMIU_Undertaking_Letter_Ajman_175_unsigned.pdf` — the **175** version as a
+  clean copy with signature, UAE PASS block and company stamp removed, leaving
+  the "(Signature & Company Stamp)" area blank to print, sign and stamp.
 
 ## Regenerating
 
