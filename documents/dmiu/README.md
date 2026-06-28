@@ -21,6 +21,15 @@ Everything else is preserved exactly: the DMIU logo, reference
 `DMIU/AJM/2026/06-001`, date, signature, UAE PASS digital-signature block,
 company stamp and footer.
 
+## Files
+
+- `DMIU_Undertaking_Letter_Ajman_Municipality_168.pdf` — the signed/stamped
+  letter with the workforce revised to 168.
+- `DMIU_Undertaking_Letter_Ajman_168_unsigned.pdf` — a clean copy with the
+  handwritten signature, UAE PASS digital-signature block and blue company
+  stamp removed, leaving the "(Signature & Company Stamp)" area blank to print,
+  sign and stamp. Logo, body text and footer are kept.
+
 ## Regenerating
 
 The source letter is a flat scanned/image PDF, so the change is applied as a
