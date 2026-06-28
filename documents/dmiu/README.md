@@ -29,6 +29,9 @@ company stamp and footer.
   handwritten signature, UAE PASS digital-signature block and blue company
   stamp removed, leaving the "(Signature & Company Stamp)" area blank to print,
   sign and stamp. Logo, body text and footer are kept.
+- `DMIU_Undertaking_Letter_Ajman_175_signed.pdf` — fully executed version with
+  the workforce stated as **175** and the original signature, UAE PASS
+  digital-signature block and company stamp retained.
 
 ## Regenerating
 
