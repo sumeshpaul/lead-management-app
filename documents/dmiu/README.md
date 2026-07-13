@@ -1,0 +1,47 @@
+# DMIU Undertaking Letter — Ajman Municipality (revised)
+
+`DMIU_Undertaking_Letter_Ajman_Municipality_168.pdf` is a revised version of the
+undertaking and request-for-approval letter from **DMIU Building Contracting
+(S.P.S) L.L.C.** to the Ajman Municipality and Planning Department regarding the
+building permit for *Rockhill Tower*.
+
+## What changed
+
+The only edit is the stated workforce in paragraph 2:
+
+> We confirm that DMIU is actively mobilizing a workforce of **168** labourers for
+> the Project.
+
+(previously **200**). This matches the current employee count of **168** for the
+establishment **D M I U BUILDING CONTRACTING S P S L L C** (Ajman, MOHRE code
+2692457), whose owner / authorized signatory is the same partner,
+**Dzhabrail Uruskhanov**.
+
+Everything else is preserved exactly: the DMIU logo, reference
+`DMIU/AJM/2026/06-001`, date, signature, UAE PASS digital-signature block,
+company stamp and footer.
+
+## Files
+
+- `DMIU_Undertaking_Letter_Ajman_Municipality_168.pdf` — the signed/stamped
+  letter with the workforce revised to 168.
+- `DMIU_Undertaking_Letter_Ajman_168_unsigned.pdf` — a clean copy with the
+  handwritten signature, UAE PASS digital-signature block and blue company
+  stamp removed, leaving the "(Signature & Company Stamp)" area blank to print,
+  sign and stamp. Logo, body text and footer are kept.
+- `DMIU_Undertaking_Letter_Ajman_175_signed.pdf` — fully executed version with
+  the workforce stated as **175** and the original signature, UAE PASS
+  digital-signature block and company stamp retained.
+- `DMIU_Undertaking_Letter_Ajman_175_unsigned.pdf` — the **175** version as a
+  clean copy with signature, UAE PASS block and company stamp removed, leaving
+  the "(Signature & Company Stamp)" area blank to print, sign and stamp.
+
+## Regenerating
+
+The source letter is a flat scanned/image PDF, so the change is applied as a
+localised, watermark-aware image patch (see `scripts/revise_undertaking_168.py`):
+
+```
+python3 scripts/revise_undertaking_168.py <original_scan>.pdf \
+    documents/dmiu/DMIU_Undertaking_Letter_Ajman_Municipality_168.pdf
+```
