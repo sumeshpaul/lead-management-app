@@ -1,5 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
+import { verifyWriteAccess } from '@/lib/auth';
 
 interface FollowUp {
   id: string;
@@ -34,6 +35,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
 }
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
+  const { error } = verifyWriteAccess(request);
+  if (error) {
+    return error;
+  }
+
   const client = await sql.connect();
   
   try {

@@ -55,6 +55,30 @@ export async function createTables() {
       );
     `;
 
+    const createUsersTable = await sql`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        phone_number VARCHAR(20) NOT NULL UNIQUE,
+        role VARCHAR(20) NOT NULL DEFAULT 'staff',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    const addRoleColumn = await sql`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'staff';
+    `;
+
+    const createVerificationCodesTable = await sql`
+      CREATE TABLE IF NOT EXISTS verification_codes (
+        id SERIAL PRIMARY KEY,
+        phone_number VARCHAR(20) NOT NULL,
+        code VARCHAR(6) NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     const createUpdateTrigger = await sql`
       CREATE OR REPLACE FUNCTION update_modified_column()
       RETURNS TRIGGER AS $$
@@ -76,6 +100,9 @@ export async function createTables() {
       createCommentsTable,
       createFollowUpsTable,
       createActivitiesTable,
+      createUsersTable,
+      addRoleColumn,
+      createVerificationCodesTable,
       createUpdateTrigger,
     };
   } catch (error) {

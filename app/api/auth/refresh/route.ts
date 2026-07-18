@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
     // Generate a new token
     const newToken = jwt.sign(
-      { userId: decoded.userId, phoneNumber: decoded.phoneNumber },
+      { userId: decoded.userId, phoneNumber: decoded.phoneNumber, role: decoded.role || 'staff' },
       JWT_SECRET,
       { expiresIn: '1d' }
     )
