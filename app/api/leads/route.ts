@@ -1,6 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, verifyWriteAccess } from '@/lib/auth';
 
 interface Lead {
   id: string;
@@ -98,14 +98,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const token = request.headers.get('Authorization')?.split(' ')[1];
-  if (!token) {
-    return NextResponse.json({ error: 'No token provided' }, { status: 401 });
-  }
-
-  const decoded = verifyToken(token);
-  if (!decoded) {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+  const { error } = verifyWriteAccess(request);
+  if (error) {
+    return error;
   }
 
   const client = await sql.connect();

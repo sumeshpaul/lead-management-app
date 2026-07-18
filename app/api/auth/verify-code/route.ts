@@ -32,9 +32,11 @@ export async function POST(request: Request) {
 
     const user = users.rows[0];
 
+    const role = user.role || 'staff';
+
     // Generate JWT token
     const token = jwt.sign(
-      { userId: user.id, phoneNumber: user.phone_number },
+      { userId: user.id, phoneNumber: user.phone_number, role },
       JWT_SECRET,
       { expiresIn: '1d' }
     );
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
         id: user.id,
         name: user.name,
         phoneNumber: user.phone_number,
+        role,
       }
     });
   } catch (error) {

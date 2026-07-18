@@ -6,7 +6,7 @@ import LeadManagementDashboard from '@/components/LeadManagementDashboard'
 
 export default function DashboardPage() {
   const [loggedIn, setLoggedIn] = useState(false)
-  const [userInfo, setUserInfo] = useState<{ phoneNumber: string; name: string } | null>(null)
+  const [userInfo, setUserInfo] = useState<{ phoneNumber: string; name: string; role?: 'staff' | 'partner' } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
@@ -44,10 +44,11 @@ export default function DashboardPage() {
   }
 
   return (
-    <LeadManagementDashboard 
-      userPhoneNumber={userInfo?.phoneNumber || ''} 
+    <LeadManagementDashboard
+      userPhoneNumber={userInfo?.phoneNumber || ''}
       userName={userInfo?.name || ''}
-      onLogout={handleLogout} 
+      userRole={userInfo?.role || 'staff'}
+      onLogout={handleLogout}
     />
   )
 }

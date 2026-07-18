@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table'
-import { PlusCircle, Edit2, MessageSquare, Clock, Calendar as CalendarIcon, Send, Trash2 } from 'lucide-react'
+import { PlusCircle, Edit2, Eye, MessageSquare, Clock, Calendar as CalendarIcon, Send, Trash2 } from 'lucide-react'
 import { useToast } from "./ui/use-toast"
 import { Badge } from './ui/badge'
 import { Textarea } from './ui/textarea'
@@ -51,10 +51,12 @@ const formatUserDisplay = (phoneNumber: string) => {
 interface LeadManagementDashboardProps {
   userPhoneNumber: string
   userName: string
+  userRole?: 'staff' | 'partner'
   onLogout: () => void
 }
 
-export default function LeadManagementDashboard({ userPhoneNumber, userName, onLogout }: LeadManagementDashboardProps) {
+export default function LeadManagementDashboard({ userPhoneNumber, userName, userRole = 'staff', onLogout }: LeadManagementDashboardProps) {
+  const isPartner = userRole === 'partner'
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [leads, setLeads] = useState<Lead[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -444,11 +446,15 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Lead Management Dashboard</h1>
         <div className="flex items-center gap-4">
-          <span>Logged in as: {userName} ({userPhoneNumber})</span>
+          <span>
+            Logged in as: {userName} ({userPhoneNumber})
+            {isPartner && <Badge variant="secondary" className="ml-2">Partner · View Only</Badge>}
+          </span>
           <Button variant="outline" onClick={onLogout}>Logout</Button>
         </div>
       </div>
-      
+
+      {!isPartner && (
       <Dialog open={isAddLeadOpen} onOpenChange={setIsAddLeadOpen}>
         <DialogTrigger asChild>
           <Button onClick={() => setIsAddLeadOpen(true)}>
@@ -503,6 +509,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
           </div>
         </DialogContent>
       </Dialog>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
@@ -527,11 +534,13 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                   <TableCell>{format(parseISO(lead.updatedAt), 'PPP')}</TableCell>
                   <TableCell>
                     <Button variant="ghost" size="sm" onClick={() => handleSelectLead(lead)}>
-                      <Edit2 className="h-4 w-4" />
+                      {isPartner ? <Eye className="h-4 w-4" /> : <Edit2 className="h-4 w-4" />}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDeleteLead(lead.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {!isPartner && (
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteLead(lead.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -558,10 +567,12 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-2xl font-bold">{selectedLead.title}</CardTitle>
-                <Button variant="outline" size="sm" onClick={handleEditClick}>
-                  <Edit2 className="mr-2 h-4 w-4" />
-                  Edit
-                </Button>
+                {!isPartner && (
+                  <Button variant="outline" size="sm" onClick={handleEditClick}>
+                    <Edit2 className="mr-2 h-4 w-4" />
+                    Edit
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 <Tabs defaultValue="details" className="w-full">
@@ -587,7 +598,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                         <h3 className="font-semibold mb-2">Status</h3>
                         <div className="flex gap-2">
                           {['New', 'In Progress', 'Closed', 'Terminated'].map((status) => {
-                            const canUpdate = canUpdateStatus(selectedLead, userPhoneNumber, status as LeadStatus)
+                            const canUpdate = !isPartner && canUpdateStatus(selectedLead, userPhoneNumber, status as LeadStatus)
                             return (
                               <Badge
                                 key={status}
@@ -600,8 +611,10 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                                   } else {
                                     toast({
                                       variant: "destructive",
-                                      title: "Permission Denie d",
-                                      description: "Only the assigned user can close or terminate this lead",
+                                      title: "Permission Denied",
+                                      description: isPartner
+                                        ? "Partner accounts have view-only access"
+                                        : "Only the assigned user can close or terminate this lead",
                                     })
                                   }
                                 }}
@@ -677,17 +690,19 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                           </p>
                         </div>
                       ))}
-                      <div className="flex gap-2">
-                        <Textarea 
-                          placeholder="Add a comment..." 
-                          value={newComment}
-                          onChange={(e) => setNewComment(e.target.value)}
-                        />
-                        <Button onClick={handleAddComment}>
-                          <Send className="mr-2 h-4 w-4" />
-                          Add Comment
-                        </Button>
-                      </div>
+                      {!isPartner && (
+                        <div className="flex gap-2">
+                          <Textarea
+                            placeholder="Add a comment..."
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                          />
+                          <Button onClick={handleAddComment}>
+                            <Send className="mr-2 h-4 w-4" />
+                            Add Comment
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </TabsContent>
 
@@ -714,6 +729,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                           </p>
                         </div>
                       ))}
+                      {!isPartner && (
                       <div className="space-y-2">
                         <Popover>
                           <PopoverTrigger asChild>
@@ -752,6 +768,7 @@ export default function LeadManagementDashboard({ userPhoneNumber, userName, onL
                           Schedule Follow-up
                         </Button>
                       </div>
+                      )}
                     </div>
                   </TabsContent>
                 </Tabs>

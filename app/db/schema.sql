@@ -1,3 +1,23 @@
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  phone_number VARCHAR(20) NOT NULL UNIQUE,
+  -- 'staff' has full access; 'partner' is view-only
+  role VARCHAR(20) NOT NULL DEFAULT 'staff',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE verification_codes (
+  id SERIAL PRIMARY KEY,
+  phone_number VARCHAR(20) NOT NULL,
+  code VARCHAR(6) NOT NULL,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Example: register a partner account (view-only access)
+-- INSERT INTO users (name, phone_number, role) VALUES ('Nihal', '+9715XXXXXXXX', 'partner');
+
 CREATE TABLE leads (
   id SERIAL PRIMARY KEY,
   title VARCHAR(255) NOT NULL,

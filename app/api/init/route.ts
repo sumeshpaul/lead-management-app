@@ -11,6 +11,9 @@ export async function GET() {
         createCommentsTable: result.createCommentsTable,
         createFollowUpsTable: result.createFollowUpsTable,
         createActivitiesTable: result.createActivitiesTable,
+        createUsersTable: result.createUsersTable,
+        addRoleColumn: result.addRoleColumn,
+        createVerificationCodesTable: result.createVerificationCodesTable,
         createUpdateTrigger: result.createUpdateTrigger
       }
     })
